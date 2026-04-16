@@ -67,7 +67,6 @@ export default function ChatPage() {
   const todayChats = useUsageStore((s) => s.chat);
 
   const loadChat = useChatStore((s) => s.loadFromStorage);
-  const chatLoaded = useChatStore((s) => s.loaded);
   const addMessage = useChatStore((s) => s.addMessage);
   const popLastAssistant = useChatStore((s) => s.popLastAssistant);
   const resetThread = useChatStore((s) => s.resetThread);

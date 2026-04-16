@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-empty-object-type */
-
 interface SpeechRecognitionEvent extends Event {
   readonly resultIndex: number;
   readonly results: SpeechRecognitionResultList;
@@ -42,6 +40,7 @@ interface SpeechRecognition extends EventTarget {
   abort(): void;
 }
 
+// eslint-disable-next-line no-var
 declare var SpeechRecognition: {
   prototype: SpeechRecognition;
   new (): SpeechRecognition;

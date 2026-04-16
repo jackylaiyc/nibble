@@ -77,7 +77,10 @@ function PoopLogPageInner() {
 
   // Once the store has loaded and we have an edit target, prefill the form.
   // We guard with `hydratedFromEdit` so subsequent re-renders don't clobber
-  // the caregiver's edits while they're typing.
+  // the caregiver's edits while they're typing. The setState calls here run
+  // exactly once (guarded by the flag), so the cascading-render concern
+  // flagged by the lint rule does not apply.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!poopsLoaded || hydratedFromEdit) return;
     if (editingRecord) {
@@ -89,6 +92,7 @@ function PoopLogPageInner() {
     }
     setHydratedFromEdit(true);
   }, [poopsLoaded, editingRecord, hydratedFromEdit]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const redFlag = useMemo(
     () => shouldReferToPediatrician(bristol, color),

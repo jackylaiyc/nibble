@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
@@ -47,8 +47,11 @@ export default function MilestonesPage() {
   // Subscribe to the array directly so unlocking a tile re-renders the
   // grid. Selecting only the lookup function gave a stable reference.
   const allMilestones = useMilestoneStore((s) => s.milestones);
-  const getForChild = (childId: string, key: MilestoneKey) =>
-    allMilestones.find((m) => m.childId === childId && m.key === key);
+  const getForChild = useCallback(
+    (childId: string, key: MilestoneKey) =>
+      allMilestones.find((m) => m.childId === childId && m.key === key),
+    [allMilestones],
+  );
 
   useEffect(() => {
     loadChildren();

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // macOS resource fork files (AppleDouble) on external drives
+    "**/._*",
   ]),
 ]);
 
