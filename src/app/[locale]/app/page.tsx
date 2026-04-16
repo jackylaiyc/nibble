@@ -98,10 +98,11 @@ export default function AppDashboard() {
         </div>
       </section>
 
-      {/* Placeholders for the real modules. */}
+      {/* Module list — scan is live, the rest fill in across Day 5-7. */}
       <section className="px-6">
         <div className="max-w-xl mx-auto space-y-3">
-          <ComingSoonRow
+          <FeatureRow
+            href="/app/scan"
             emoji="📸"
             title={locale === "en" ? "Plate scan" : "餐盤分析"}
             sub={
@@ -119,7 +120,8 @@ export default function AppDashboard() {
                 : "副食品、過敏、挑食問題都能問"
             }
           />
-          <ComingSoonRow
+          <FeatureRow
+            href="/app/poop/log"
             emoji="💩"
             title={locale === "en" ? "Poop log" : "便便紀錄"}
             sub={
@@ -156,6 +158,39 @@ function InfoCell({ label, value }: { label: string; value: string }) {
       <p className="text-xs text-ink-faded mb-1">{label}</p>
       <p className="font-medium text-ink">{value}</p>
     </div>
+  );
+}
+
+function FeatureRow({
+  href,
+  emoji,
+  title,
+  sub,
+}: {
+  href:
+    | "/app/scan"
+    | "/app/chat"
+    | "/app/poop/log"
+    | "/app/poop/history"
+    | "/app/growth";
+  emoji: string;
+  title: string;
+  sub: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-4 p-5 rounded-card bg-white border border-border hover:border-peach-deep hover:bg-peach/10 transition"
+    >
+      <div className="size-12 rounded-2xl bg-sage/30 flex items-center justify-center text-2xl">
+        {emoji}
+      </div>
+      <div className="flex-1">
+        <p className="font-display font-semibold text-ink">{title}</p>
+        <p className="mt-0.5 text-sm text-ink-soft">{sub}</p>
+      </div>
+      <span className="text-ink-soft text-lg">→</span>
+    </Link>
   );
 }
 

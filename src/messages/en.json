@@ -148,5 +148,25 @@
     "unit_g": "g",
     "disclaimer": "Nutrient estimates use WHO/AAP averages — individual babies may differ.",
     "newFoodChip": "new food"
+  },
+  "Poop": {
+    "title": "Log a diaper",
+    "sub": "Pick the closest shape + color. This helps spot patterns — it's not a diagnosis.",
+    "bristolTitle": "Shape (Bristol scale)",
+    "bristolLabelPrefix": "Type {n}",
+    "colorTitle": "Color",
+    "timeLabel": "Time",
+    "notesLabel": "Notes",
+    "notesPlaceholder": "Unusual smell, straining, new food trial…",
+    "redFlagTitle": "Please check with your pediatrician",
+    "redFlagHint": "Black, red, or white stools, or persistent watery stools, can signal something your pediatrician should see.",
+    "save": "Save entry",
+    "saving": "Saving…",
+    "historyLink": "History",
+    "historyTitle": "Poop history",
+    "newEntry": "New entry",
+    "emptyHistory": "No entries yet. Log the first one to start tracking patterns.",
+    "noChildWarning": "Create a baby profile first so we can link the log.",
+    "goToOnboarding": "Go to setup"
   }
 }

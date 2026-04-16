@@ -148,5 +148,25 @@
     "unit_g": "g",
     "disclaimer": "營養估算依 WHO/AAP 平均值，個別寶寶需求可能不同。",
     "newFoodChip": "新食物"
+  },
+  "Poop": {
+    "title": "記錄便便",
+    "sub": "選擇最接近的形狀和顏色。這是幫你觀察寶寶狀態，不是醫療診斷。",
+    "bristolTitle": "形狀（Bristol 量表）",
+    "bristolLabelPrefix": "第 {n} 型",
+    "colorTitle": "顏色",
+    "timeLabel": "時間",
+    "notesLabel": "備註",
+    "notesPlaceholder": "氣味異常、用力排便、新食物試驗⋯⋯",
+    "redFlagTitle": "建議諮詢兒科醫師",
+    "redFlagHint": "黑色、紅色、白色便便，或持續水便，可能需要醫師評估。",
+    "save": "儲存紀錄",
+    "saving": "儲存中⋯⋯",
+    "historyLink": "歷史",
+    "historyTitle": "便便紀錄",
+    "newEntry": "新增紀錄",
+    "emptyHistory": "還沒有紀錄。記錄第一筆，開始觀察寶貝的模式。",
+    "noChildWarning": "請先建立寶貝檔案，才能連結紀錄。",
+    "goToOnboarding": "前往設定檔"
   }
 }
