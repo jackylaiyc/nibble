@@ -1,0 +1,62 @@
+{
+  "Brand": {
+    "name": "Nibble",
+    "nameZh": "寶貝小口",
+    "tagline": "Snap the plate. Know if they got enough."
+  },
+  "Nav": {
+    "home": "Home",
+    "features": "Features",
+    "pricing": "Pricing",
+    "login": "Log in",
+    "signup": "Start free",
+    "dashboard": "My baby"
+  },
+  "Landing": {
+    "heroTitle": "Snap the plate. Know if they got enough.",
+    "heroSub": "Nibble analyzes your baby's meals with AI and shows exactly how much iron, zinc, calcium, and DHA they're getting — plus answers every first-time-parent question you have.",
+    "heroCta": "Start 7-day free trial",
+    "heroSecondary": "See how it works",
+    "noCreditCard": "No credit card required. Cancel anytime.",
+    "painTitle": "Sound familiar?",
+    "pain1Title": "\"Just offer variety\"",
+    "pain1Desc": "Your pediatrician didn't have time to say what to actually offer.",
+    "pain2Title": "Is she getting enough iron?",
+    "pain2Desc": "You added red meat and egg yolk — but is it really enough?",
+    "pain3Title": "Why is his poop that color?",
+    "pain3Desc": "Green, yellow, black... you Google it every time.",
+    "pain4Title": "Can I give her this?",
+    "pain4Desc": "When to introduce peanuts, eggs, shellfish — you're guessing.",
+    "howTitle": "How Nibble helps",
+    "how1Title": "Snap the plate",
+    "how1Desc": "One photo. No weighing, no typing.",
+    "how2Title": "AI analyzes",
+    "how2Desc": "Iron, zinc, calcium, DHA — today's progress in 3 seconds.",
+    "how3Title": "Ask anything",
+    "how3Desc": "Solids, allergens, poop, milestones — Nibble is ready.",
+    "featuresTitle": "Everything a new parent needs",
+    "feature1": "Plate photo analysis",
+    "feature2": "AI chat assistant",
+    "feature3": "Poop tracker",
+    "feature4": "Sleep logger",
+    "feature5": "Milestone collection",
+    "feature6": "Allergic reactions log",
+    "feature7": "Growth curves",
+    "feature8": "Shareable growth cards",
+    "proofTitle": "What parents say",
+    "finalCtaTitle": "Start feeding with confidence today",
+    "finalCtaDesc": "Free for 7 days. Cancel anytime, no questions asked.",
+    "finalCta": "Start free trial"
+  },
+  "Disclaimer": {
+    "footer": "Educational use only. Not medical advice. Always consult your pediatrician.",
+    "aiResponse": "This is educational information only, not medical advice. Please contact your pediatrician with any concerns."
+  },
+  "Common": {
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "close": "Close"
+  }
+}

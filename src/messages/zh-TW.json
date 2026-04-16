@@ -1,0 +1,62 @@
+{
+  "Brand": {
+    "name": "Nibble",
+    "nameZh": "寶貝小口",
+    "tagline": "拍張照，就知道寶貝今天吃夠了沒"
+  },
+  "Nav": {
+    "home": "首頁",
+    "features": "功能",
+    "pricing": "方案",
+    "login": "登入",
+    "signup": "免費試用",
+    "dashboard": "我的寶貝"
+  },
+  "Landing": {
+    "heroTitle": "拍張照，就知道寶貝今天吃夠了沒",
+    "heroSub": "Nibble 用 AI 分析寶寶的每一餐，告訴你鐵、鋅、鈣補夠沒，還能回答你所有新手爸媽的疑惑。",
+    "heroCta": "免費試用 7 天",
+    "heroSecondary": "看看怎麼運作",
+    "noCreditCard": "不需信用卡，隨時取消",
+    "painTitle": "每天都在擔心這些事？",
+    "pain1Title": "「多樣化就好」",
+    "pain1Desc": "小兒科沒時間解釋寶寶實際需要多少鐵、鋅、鈣。",
+    "pain2Title": "鐵質到底補夠沒？",
+    "pain2Desc": "副食品加了紅肉、蛋黃，還是擔心不夠。",
+    "pain3Title": "便便顏色代表什麼？",
+    "pain3Desc": "綠色、黃色、黑色⋯⋯每次都想查 Google。",
+    "pain4Title": "這個能給寶寶吃嗎？",
+    "pain4Desc": "過敏原怎麼引入、幾個月可以吃蛋白？",
+    "howTitle": "Nibble 怎麼幫你",
+    "how1Title": "拍下餐盤",
+    "how1Desc": "一張照片，不用秤重、不用記錄。",
+    "how2Title": "AI 秒分析",
+    "how2Desc": "鐵、鋅、鈣、DHA⋯⋯所有關鍵營養素的今日進度。",
+    "how3Title": "隨時發問",
+    "how3Desc": "副食品、過敏、便便、里程碑，Nibble 都知道。",
+    "featuresTitle": "完整的新手爸媽工具箱",
+    "feature1": "餐盤照片分析",
+    "feature2": "AI 問答助手",
+    "feature3": "便便追蹤",
+    "feature4": "睡眠記錄",
+    "feature5": "里程碑收藏",
+    "feature6": "過敏反應紀錄",
+    "feature7": "生長曲線",
+    "feature8": "可分享成長卡片",
+    "proofTitle": "爸媽都怎麼說",
+    "finalCtaTitle": "和寶寶一起，從今天開始安心餵養",
+    "finalCtaDesc": "免費 7 天試用，不滿意隨時取消。",
+    "finalCta": "開始免費試用"
+  },
+  "Disclaimer": {
+    "footer": "僅供教育參考，並非醫療建議。有疑慮請諮詢兒科醫師。",
+    "aiResponse": "本回應僅供教育參考，並非醫療建議。如有疑慮請諮詢兒科醫師。"
+  },
+  "Common": {
+    "loading": "載入中⋯⋯",
+    "save": "儲存",
+    "cancel": "取消",
+    "delete": "刪除",
+    "close": "關閉"
+  }
+}
