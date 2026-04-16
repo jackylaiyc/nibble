@@ -154,6 +154,27 @@
     "disclaimer": "Nutrient estimates use WHO/AAP averages — individual babies may differ.",
     "newFoodChip": "new food"
   },
+  "Chat": {
+    "title": "Ask Nibble",
+    "subFor": "For {name}",
+    "reset": "New",
+    "resetConfirm": "Clear this conversation?",
+    "usedToday": "{used} of {cap} free messages today",
+    "emptyTitle": "Hi — I'm Nibble 🍎",
+    "emptySub": "Ask me anything about feeding, iron, allergens, poop, or what comes next. I'm educational, not medical — for any health concern please call your pediatrician.",
+    "suggest1": "How much iron does my baby need right now?",
+    "suggest2": "How do I introduce peanut safely?",
+    "suggest3": "She keeps refusing vegetables — any ideas?",
+    "suggest4": "What are age-appropriate snacks?",
+    "inputPlaceholder": "Ask Nibble about feeding, allergens, milestones…",
+    "send": "Send",
+    "sending": "Sending…",
+    "composerFooter": "Educational reference only. For any symptom or concern, please contact your pediatrician.",
+    "thinking": "Nibble is thinking",
+    "error": "Something went wrong. Please try again.",
+    "emergencyTitle": "Call your pediatrician right away",
+    "pediatricianTitle": "Please contact your pediatrician"
+  },
   "Poop": {
     "title": "Log a diaper",
     "sub": "Pick the closest shape + color. This helps spot patterns — it's not a diagnosis.",

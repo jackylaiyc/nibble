@@ -111,7 +111,8 @@ export default function AppDashboard() {
                 : "拍照看鐵、鋅、鈣的覆蓋率"
             }
           />
-          <ComingSoonRow
+          <FeatureRow
+            href="/app/chat"
             emoji="💬"
             title={locale === "en" ? "Ask Nibble" : "問 Nibble"}
             sub={
@@ -228,28 +229,3 @@ function FeatureRow({
   );
 }
 
-function ComingSoonRow({
-  emoji,
-  title,
-  sub,
-}: {
-  emoji: string;
-  title: string;
-  sub: string;
-}) {
-  return (
-    <div className="flex items-center gap-4 p-5 rounded-card bg-white border border-border">
-      <div className="size-12 rounded-2xl bg-cream flex items-center justify-center text-2xl">
-        {emoji}
-      </div>
-      <div className="flex-1">
-        <p className="font-display font-semibold text-ink">{title}</p>
-        <p className="mt-0.5 text-sm text-ink-soft">{sub}</p>
-      </div>
-      <span className="text-xs font-medium bg-butter/60 text-ink-soft px-3 py-1 rounded-full whitespace-nowrap">
-        {/* Intentionally un-translated tiny label so both locales see the same pill. */}
-        soon
-      </span>
-    </div>
-  );
-}
