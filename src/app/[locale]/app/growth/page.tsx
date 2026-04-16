@@ -19,6 +19,7 @@ import {
 } from "@/stores/growthStore";
 import { ageInfoFromDob, monthsBetween } from "@/lib/pediatric/ageBucket";
 import {
+  hasLmsData,
   lookupLms,
   valueToPercentile,
   type Measure,
@@ -450,11 +451,16 @@ function LatestCell({
       <p className="text-[10px] text-ink-faded">
         {label} ({unit})
       </p>
-      <p className="mt-1 text-[11px] font-medium text-sage-deep tabular-nums">
-        {percentile !== null
-          ? `${localeStr === "en" ? "P" : "第 "}${Math.round(percentile)}${localeStr === "zh-TW" ? " 百分位" : ""}`
-          : "—"}
-      </p>
+      {/* Hide the percentile line entirely when WHO LMS data isn't loaded —
+          a permanent "—" reads like a broken display rather than a feature
+          that hasn't shipped yet. The disclaimer below the chart explains. */}
+      {hasLmsData() && (
+        <p className="mt-1 text-[11px] font-medium text-sage-deep tabular-nums">
+          {percentile !== null
+            ? `${localeStr === "en" ? "P" : "第 "}${Math.round(percentile)}${localeStr === "zh-TW" ? " 百分位" : ""}`
+            : "—"}
+        </p>
+      )}
     </div>
   );
 }

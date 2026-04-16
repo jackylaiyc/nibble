@@ -441,7 +441,7 @@
     "save": "儲存測量",
     "historyTitle": "歷史紀錄",
     "emptyList": "還沒有測量紀錄。",
-    "disclaimer": "百分位需設定寶貝生理性別才能計算，依 WHO 生長標準。個別差異屬正常。",
+    "disclaimer": "趨勢圖依 WHO 生長標準參考。WHO 百分位讀數開發中，即將推出。個別差異屬正常。",
     "noChildWarning": "請先建立寶貝檔案，才能計算百分位。",
     "goToOnboarding": "建立寶貝檔案"
   }

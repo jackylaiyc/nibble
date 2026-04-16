@@ -441,7 +441,7 @@
     "save": "Save measurement",
     "historyTitle": "History",
     "emptyList": "No measurements yet.",
-    "disclaimer": "Percentiles use WHO growth standards when your baby's sex is set. Individual variation is normal.",
+    "disclaimer": "Trend chart references WHO growth standards. WHO percentile readouts are coming soon. Individual variation is normal.",
     "noChildWarning": "Create a baby profile first so we can calculate percentiles.",
     "goToOnboarding": "Go to setup"
   }

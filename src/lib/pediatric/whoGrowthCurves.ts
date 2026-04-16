@@ -65,7 +65,20 @@ export function valueToPercentile(value: number, lms: LmsEntry): number {
 /**
  * Look up the LMS triplet for a given measurement, sex, and age in months.
  * Returns `null` until the WHO coefficient JSON has been loaded into
- * `setLmsTable()` — the chart component triggers that lazily.
+ * `setLmsTable()`.
+ *
+ * TODO (growth percentile): Wire actual WHO 2006 Child Growth Standards LMS
+ * data here. Source: https://www.who.int/tools/child-growth-standards/standards
+ * Need monthly LMS triplets for ages 0–60mo for both sexes across:
+ *   - weight-for-age (kg)
+ *   - length/height-for-age (cm)
+ *   - head-circumference-for-age (cm)
+ * Until then `lookupLms` returns null and `LatestCell` shows "—" — UI
+ * degrades gracefully but percentile readout is non-functional. The WHO
+ * tables are public-domain; download CSV/expanded-tables from the link
+ * above, run a small script to convert to `Record<measure, Record<sex,
+ * Record<month, {l,m,s}>>>`, then call `setLmsTable(table)` here at module
+ * load time.
  */
 let lmsTable: Record<Measure, Record<Sex, Record<number, LmsEntry>>> | null =
   null;
@@ -74,6 +87,12 @@ export function setLmsTable(
   table: Record<Measure, Record<Sex, Record<number, LmsEntry>>>,
 ): void {
   lmsTable = table;
+}
+
+/** True once WHO LMS data has been loaded — UI uses this to hide percentile
+ * readouts that would always render "—" when data hasn't been wired yet. */
+export function hasLmsData(): boolean {
+  return lmsTable !== null;
 }
 
 export function lookupLms(

@@ -570,7 +570,8 @@ export default function ScanPage() {
                       priorityNutrients.slice(0, 4).map((n) => [
                         n,
                         NUTRIENT_LABELS[n][locale],
-                        coverageByNutrient[n]?.coverage ?? 0,
+                        // ScanCard expects 0-100; coverage is a 0-1 ratio.
+                        Math.round((coverageByNutrient[n]?.coverage ?? 0) * 100),
                       ]),
                     ),
                   }}
