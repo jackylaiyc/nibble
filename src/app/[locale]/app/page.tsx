@@ -98,7 +98,7 @@ export default function AppDashboard() {
         </div>
       </section>
 
-      {/* Module list — scan is live, the rest fill in across Day 5-7. */}
+      {/* Module list — Day 5-7 lit up the first six; chat comes Day 8+. */}
       <section className="px-6">
         <div className="max-w-xl mx-auto space-y-3">
           <FeatureRow
@@ -130,13 +130,44 @@ export default function AppDashboard() {
                 : "Bristol 量表 + 顏色，警示紅/白/黑"
             }
           />
-          <ComingSoonRow
-            emoji="📈"
-            title={locale === "en" ? "Growth curves" : "生長曲線"}
+          <FeatureRow
+            href="/app/sleep"
+            emoji="😴"
+            title={locale === "en" ? "Sleep log" : "睡眠紀錄"}
             sub={
               locale === "en"
-                ? "WHO percentiles for weight / height / head"
-                : "WHO 體重 / 身高 / 頭圍百分位"
+                ? "Naps + nights with wake events and totals"
+                : "小睡 + 夜晚，含夜醒次數與總時數"
+            }
+          />
+          <FeatureRow
+            href="/app/milestones"
+            emoji="🎉"
+            title={locale === "en" ? "Milestones" : "里程碑"}
+            sub={
+              locale === "en"
+                ? "Preset checklist tuned to baby's age"
+                : "依月齡推薦的里程碑清單"
+            }
+          />
+          <FeatureRow
+            href="/app/reactions"
+            emoji="⚠️"
+            title={locale === "en" ? "Reaction log" : "過敏反應紀錄"}
+            sub={
+              locale === "en"
+                ? "Food, symptoms, severity — with a referral cue"
+                : "食物、症狀、嚴重度——附就醫提示"
+            }
+          />
+          <FeatureRow
+            href="/app/growth"
+            emoji="📈"
+            title={locale === "en" ? "Growth" : "生長曲線"}
+            sub={
+              locale === "en"
+                ? "Weight / height / head with WHO percentiles"
+                : "體重 / 身高 / 頭圍 WHO 百分位"
             }
           />
         </div>
@@ -172,6 +203,9 @@ function FeatureRow({
     | "/app/chat"
     | "/app/poop/log"
     | "/app/poop/history"
+    | "/app/sleep"
+    | "/app/milestones"
+    | "/app/reactions"
     | "/app/growth";
   emoji: string;
   title: string;
