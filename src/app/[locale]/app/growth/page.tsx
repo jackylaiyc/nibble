@@ -24,6 +24,8 @@ import {
   type Measure,
   type Sex,
 } from "@/lib/pediatric/whoGrowthCurves";
+import { ShareCardButton } from "@/components/share/ShareCardButton";
+import { MotionReveal } from "@/components/joyful/MotionReveal";
 
 /**
  * Growth tracker.
@@ -156,7 +158,10 @@ export default function GrowthPage() {
       <div className="max-w-xl mx-auto px-6 pt-6 space-y-6">
         {/* Latest snapshot */}
         {latest && (
-          <section className="rounded-bubble bg-white card-pop p-5">
+          <MotionReveal
+            key={latest.id}
+            className="rounded-bubble bg-white card-pop p-5"
+          >
             <p className="text-xs font-medium text-ink-faded">
               {t("latestLabel")} · {latest.date}
             </p>
@@ -189,7 +194,42 @@ export default function GrowthPage() {
                 localeStr={locale}
               />
             </div>
-          </section>
+            <div className="mt-5 flex justify-center">
+              <ShareCardButton
+                type="growth"
+                size="square"
+                label={locale === "en" ? "Share card" : "分享卡片"}
+                className="bg-sage/60 text-ink px-5 py-2.5 hover:bg-sage-deep hover:text-white"
+                filename={`nibble-growth-${latest.date}.png`}
+                params={{
+                  childName: activeChild.name,
+                  ageText: ageInfo.displayShort,
+                  date: latest.date,
+                  weight: latest.weightKg,
+                  height: latest.heightCm,
+                  head: latest.headCm,
+                  pWeight: percentileFor(
+                    latest.weightKg,
+                    "weight",
+                    sexForWho,
+                    ageInfo.months,
+                  ),
+                  pHeight: percentileFor(
+                    latest.heightCm,
+                    "height",
+                    sexForWho,
+                    ageInfo.months,
+                  ),
+                  pHead: percentileFor(
+                    latest.headCm,
+                    "head",
+                    sexForWho,
+                    ageInfo.months,
+                  ),
+                }}
+              />
+            </div>
+          </MotionReveal>
         )}
 
         {/* Chart */}
@@ -450,6 +490,19 @@ function GrowthRow({
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────
+
+function percentileFor(
+  value: number | undefined,
+  measure: Measure,
+  sex: Sex | null,
+  ageMonths: number,
+): number | undefined {
+  if (value === undefined || !sex) return undefined;
+  const lms = lookupLms(measure, sex, ageMonths);
+  if (!lms) return undefined;
+  const p = valueToPercentile(value, lms);
+  return Number.isFinite(p) ? Math.round(p) : undefined;
+}
 
 function parseNumber(v: string): number | undefined {
   const n = parseFloat(v);

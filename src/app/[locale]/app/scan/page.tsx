@@ -22,6 +22,7 @@ import {
 } from "@/lib/pediatric/rdaGapAnalysis";
 import { RDARing } from "@/components/pediatric/RDARing";
 import { DISCLAIMERS } from "@/lib/pediatric/disclaimers";
+import { ShareCardButton } from "@/components/share/ShareCardButton";
 
 /**
  * Plate scan page — Nibble's hero feature.
@@ -444,6 +445,26 @@ export default function ScanPage() {
               <p className="mt-3 text-[11px] text-ink-faded text-center">
                 {t("disclaimer")} · {DISCLAIMERS.rdaResults[locale]}
               </p>
+              <div className="mt-4 flex justify-center">
+                <ShareCardButton
+                  type="scan"
+                  size="square"
+                  label={locale === "en" ? "Share today's plate" : "分享今日餐盤"}
+                  className="bg-peach/60 text-ink px-5 py-2.5 hover:bg-peach-deep hover:text-white"
+                  filename="nibble-plate.png"
+                  params={{
+                    childName: activeChild.name,
+                    ageText: ageInfoFromDob(activeChild.dob).displayShort,
+                    nutrients: JSON.stringify(
+                      priorityNutrients.slice(0, 4).map((n) => [
+                        n,
+                        NUTRIENT_LABELS[n][locale],
+                        coverageByNutrient[n]?.coverage ?? 0,
+                      ]),
+                    ),
+                  }}
+                />
+              </div>
             </div>
           </section>
         )}

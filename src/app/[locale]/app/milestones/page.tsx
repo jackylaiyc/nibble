@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
@@ -15,6 +15,12 @@ import {
   ageInfoFromDob,
   type AgeBucket,
 } from "@/lib/pediatric/ageBucket";
+import { Confetti } from "@/components/joyful/Confetti";
+import {
+  StaggerGroup,
+  StaggerItem,
+} from "@/components/joyful/MotionReveal";
+import { ShareCardButton } from "@/components/share/ShareCardButton";
 
 /**
  * Milestone grid — one tile per preset milestone, grouped by age bucket.
@@ -46,12 +52,29 @@ export default function MilestonesPage() {
   }, [loadChildren, loadMs]);
 
   const [editing, setEditing] = useState<MilestoneKey | null>(null);
+  const [confettiTick, setConfettiTick] = useState(0);
+  // Track keys that were already unlocked on mount so we only fire confetti
+  // for genuinely new unlocks inside this session (not when the user just
+  // opens a past-achieved tile).
+  const seenUnlocked = useRef<Set<MilestoneKey> | null>(null);
 
   const currentBucket = activeChild
     ? ageInfoFromDob(activeChild.dob).bucket
     : null;
 
   const grouped = useMemo(() => groupByBucket(milestonesSorted()), []);
+
+  // Seed the "already unlocked" set once both stores are hydrated so first
+  // render doesn't retroactively celebrate every stored milestone.
+  useEffect(() => {
+    if (!activeChild || seenUnlocked.current !== null) return;
+    if (!childLoaded || !msLoaded) return;
+    const initial = new Set<MilestoneKey>();
+    for (const m of milestonesSorted()) {
+      if (getForChild(activeChild.id, m.key)) initial.add(m.key);
+    }
+    seenUnlocked.current = initial;
+  }, [activeChild, childLoaded, msLoaded, getForChild]);
 
   if (!childLoaded || !msLoaded) {
     return (
@@ -82,6 +105,8 @@ export default function MilestonesPage() {
   const activeRecord =
     editing ? getForChild(activeChild.id, editing) : undefined;
 
+  const ageInfoNow = ageInfoFromDob(activeChild.dob);
+
   return (
     <main className="min-h-screen pb-16">
       <header className="sticky top-0 z-20 bg-cream/90 backdrop-blur-md border-b border-border px-6 py-4">
@@ -110,43 +135,44 @@ export default function MilestonesPage() {
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <StaggerGroup className="grid grid-cols-2 gap-3">
                 {items.map((m) => {
                   const record = getForChild(activeChild.id, m.key);
                   const unlocked = !!record;
                   return (
-                    <button
-                      key={m.key}
-                      type="button"
-                      onClick={() => setEditing(m.key)}
-                      className={`text-left p-4 rounded-card transition-all ${
-                        unlocked
-                          ? "bg-sage/30 border-2 border-sage-deep"
-                          : isCurrent
-                            ? "bg-white border border-border hover:border-peach-deep"
-                            : "bg-white border border-border opacity-70 hover:opacity-100 hover:border-peach-deep"
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <div className="text-2xl">{m.emoji}</div>
-                        {unlocked && (
-                          <span className="ml-auto text-xs font-semibold text-sage-deep">
-                            ✓
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-2 font-display font-semibold text-sm text-ink leading-tight">
-                        {m.label[locale]}
-                      </p>
-                      {unlocked && record && (
-                        <p className="mt-1 text-[11px] text-ink-faded tabular-nums">
-                          {record.achievedAt}
+                    <StaggerItem key={m.key}>
+                      <button
+                        type="button"
+                        onClick={() => setEditing(m.key)}
+                        className={`w-full text-left p-4 rounded-card transition-all ${
+                          unlocked
+                            ? "bg-sage/30 border-2 border-sage-deep"
+                            : isCurrent
+                              ? "bg-white border border-border hover:border-peach-deep"
+                              : "bg-white border border-border opacity-70 hover:opacity-100 hover:border-peach-deep"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="text-2xl">{m.emoji}</div>
+                          {unlocked && (
+                            <span className="ml-auto text-xs font-semibold text-sage-deep">
+                              ✓
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-2 font-display font-semibold text-sm text-ink leading-tight">
+                          {m.label[locale]}
                         </p>
-                      )}
-                    </button>
+                        {unlocked && record && (
+                          <p className="mt-1 text-[11px] text-ink-faded tabular-nums">
+                            {record.achievedAt}
+                          </p>
+                        )}
+                      </button>
+                    </StaggerItem>
                   );
                 })}
-              </div>
+              </StaggerGroup>
             </section>
           );
         })}
@@ -158,6 +184,8 @@ export default function MilestonesPage() {
           milestone={activeMilestone}
           existing={activeRecord}
           locale={locale}
+          childName={activeChild.name}
+          ageText={ageInfoNow.displayShort}
           onClose={() => setEditing(null)}
           onSave={(payload) => {
             upsert({
@@ -166,10 +194,19 @@ export default function MilestonesPage() {
               achievedAt: payload.achievedAt,
               notes: payload.notes,
             });
+            // Fire confetti + mark as seen only for genuine new unlocks.
+            if (
+              seenUnlocked.current &&
+              !seenUnlocked.current.has(activeMilestone.key)
+            ) {
+              seenUnlocked.current.add(activeMilestone.key);
+              setConfettiTick((n) => n + 1);
+            }
             setEditing(null);
           }}
           onRemove={() => {
             remove(activeChild.id, activeMilestone.key);
+            seenUnlocked.current?.delete(activeMilestone.key);
             setEditing(null);
           }}
           labels={{
@@ -180,9 +217,12 @@ export default function MilestonesPage() {
             save: tCommon("save"),
             cancel: tCommon("cancel"),
             remove: t("removeMilestone"),
+            share: locale === "en" ? "Share card" : "分享卡片",
           }}
         />
       )}
+
+      <Confetti trigger={confettiTick} />
     </main>
   );
 }
@@ -191,6 +231,8 @@ function EditMilestoneModal({
   milestone,
   existing,
   locale,
+  childName,
+  ageText,
   onClose,
   onSave,
   onRemove,
@@ -199,6 +241,8 @@ function EditMilestoneModal({
   milestone: MilestoneInfo;
   existing?: { achievedAt: string; notes: string };
   locale: "zh-TW" | "en";
+  childName: string;
+  ageText: string;
   onClose: () => void;
   onSave: (payload: { achievedAt: string; notes: string }) => void;
   onRemove: () => void;
@@ -210,6 +254,7 @@ function EditMilestoneModal({
     save: string;
     cancel: string;
     remove: string;
+    share: string;
   };
 }) {
   const [achievedAt, setAchievedAt] = useState(
@@ -293,6 +338,25 @@ function EditMilestoneModal({
             {labels.save}
           </button>
         </div>
+
+        {existing && (
+          <div className="mt-4 pt-4 border-t border-border flex justify-center">
+            <ShareCardButton
+              type="milestone"
+              size="square"
+              label={labels.share}
+              className="bg-butter text-ink px-5 py-2.5 hover:bg-butter-deep"
+              filename={`nibble-milestone-${milestone.key}.png`}
+              params={{
+                childName,
+                ageText,
+                emoji: milestone.emoji,
+                label: milestone.label[locale],
+                achievedAt: existing.achievedAt,
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
