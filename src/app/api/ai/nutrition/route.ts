@@ -89,7 +89,7 @@ interface ResponseFoodItem {
 
 interface ErrorPayload {
   error: string;
-  code?: "NO_FOODS" | "FACE_DETECTED" | "BAD_INPUT" | "GEMINI_FAILED" | "PARSE_FAILED";
+  code?: "NO_FOODS" | "FACE_DETECTED" | "BAD_INPUT" | "GEMINI_FAILED" | "PARSE_FAILED" | "AI_NOT_CONFIGURED";
 }
 
 // ─── prompt construction ──────────────────────────────────────────────────
