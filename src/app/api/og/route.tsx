@@ -111,8 +111,10 @@ export async function GET(req: NextRequest) {
       height: dims.height,
     });
   } catch (err) {
+    // Log the full error server-side; never echo internals to the client.
+    // OG cards are also fetched by social media crawlers, so leaks would
+    // surface in their cached error pages.
     console.error("[og] handler error", err);
-    const message = err instanceof Error ? err.message : String(err);
-    return new Response(`OG render failed: ${message}`, { status: 500 });
+    return new Response("OG render failed", { status: 500 });
   }
 }

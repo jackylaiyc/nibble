@@ -51,10 +51,10 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ url: session.url });
   } catch (err) {
+    // Log details server-side; never echo Stripe internals to clients.
     console.error("[stripe/portal] error", err);
-    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: "portal_failed", message },
+      { error: "portal_failed" },
       { status: 500 },
     );
   }

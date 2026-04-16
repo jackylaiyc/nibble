@@ -103,10 +103,10 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ url: session.url, sessionId: session.id });
   } catch (err) {
+    // Log details server-side; never echo Stripe internals to clients.
     console.error("[stripe/checkout] error", err);
-    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: "checkout_failed", message },
+      { error: "checkout_failed" },
       { status: 500 },
     );
   }

@@ -78,10 +78,11 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(payload);
   } catch (err) {
+    // Log details server-side; never echo Stripe internals (API key text,
+    // customer/subscription IDs, billing context) to clients.
     console.error("[stripe/status] error", err);
-    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: "status_failed", message },
+      { error: "status_failed" },
       { status: 500 },
     );
   }

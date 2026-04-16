@@ -47,10 +47,12 @@ export async function POST(req: NextRequest) {
   try {
     event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[stripe/webhook] signature verification failed", message);
+    // Log full error server-side; never echo it. Anyone can hit this URL
+    // with a forged signature, and the inner Stripe error text can include
+    // hints about our webhook secret format.
+    console.error("[stripe/webhook] signature verification failed", err);
     return NextResponse.json(
-      { error: "signature_verification_failed", message },
+      { error: "signature_verification_failed" },
       { status: 400 },
     );
   }
