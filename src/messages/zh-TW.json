@@ -90,7 +90,7 @@
     "sexFemale": "女寶",
     "sexMale": "男寶",
     "sexUnspecified": "暫不填寫",
-    "sexHint": "用於 WHO 生長曲線比對；不影響其他功能。",
+    "sexHint": "用於生長趨勢圖；不影響其他功能。",
     "avatarLabel": "選個頭像",
 
     "step2Title": "寶貝幾歲了？",

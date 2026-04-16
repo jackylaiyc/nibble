@@ -90,7 +90,7 @@
     "sexFemale": "Girl",
     "sexMale": "Boy",
     "sexUnspecified": "Prefer not to say",
-    "sexHint": "Used for WHO growth-curve plotting only.",
+    "sexHint": "Used for the growth trend chart only.",
     "avatarLabel": "Pick an avatar",
 
     "step2Title": "How old is your baby?",

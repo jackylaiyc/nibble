@@ -45,6 +45,7 @@ export default function OnboardingPage() {
   const tCommon = useTranslations("Common");
   const router = useRouter();
   const addChild = useChildProfileStore((s) => s.addChild);
+  const setActiveChild = useChildProfileStore((s) => s.setActiveChild);
   const loadFromStorage = useChildProfileStore((s) => s.loadFromStorage);
 
   // Hydrate any existing store state so re-runs don't overwrite the first child.
@@ -103,7 +104,7 @@ export default function OnboardingPage() {
   async function finish() {
     if (!consent || saving) return;
     setSaving(true);
-    addChild({
+    const newId = addChild({
       name: name.trim(),
       dob,
       sex,
@@ -112,8 +113,10 @@ export default function OnboardingPage() {
       allergens: noneKnown ? [] : allergens,
       notes: "",
     });
-    // Thin navigation — the app dashboard renders from the newly created
-    // activeChild in the store.
+    // Onboarding always lands the caregiver on the just-added child —
+    // otherwise siblings added after the first one stay invisible because
+    // addChild preserves the previous activeChildId.
+    setActiveChild(newId);
     router.push("/app");
   }
 
