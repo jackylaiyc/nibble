@@ -18,6 +18,13 @@
     "heroCta": "免費試用 7 天",
     "heroSecondary": "看看怎麼運作",
     "noCreditCard": "不需信用卡，隨時取消",
+    "demoMealLabel": "早餐 · 8:42",
+    "demoChildLabel": "9 個月 · BLW 模式",
+    "demoStatus": "AI 分析完成",
+    "demoNutrientIron": "鐵",
+    "demoNutrientZinc": "鋅",
+    "demoNutrientCalcium": "鈣",
+    "demoSuggestion": "今日鐵質差一點 — 建議晚餐加一點紅肉泥或蛋黃 🥚",
     "painTitle": "每天都在擔心這些事？",
     "pain1Title": "「多樣化就好」",
     "pain1Desc": "小兒科沒時間解釋寶寶實際需要多少鐵、鋅、鈣。",
@@ -62,6 +69,7 @@
     "save": "儲存",
     "cancel": "取消",
     "delete": "刪除",
+    "edit": "編輯",
     "close": "關閉",
     "next": "下一步",
     "back": "上一步",
@@ -122,7 +130,8 @@
   "Scan": {
     "title": "拍張寶貝的餐盤",
     "sub": "把整盤拍下來，Nibble 會辨識每樣食物和營養。",
-    "choosePhoto": "選擇照片",
+    "choosePhoto": "拍照",
+    "fromLibrary": "從相簿選擇",
     "retake": "重拍",
     "mealTypeLabel": "這是哪一餐？",
     "mealBreakfast": "早餐",
@@ -132,12 +141,18 @@
     "analyze": "開始分析",
     "analyzing": "AI 正在辨識中⋯⋯",
     "noChildWarning": "請先建立寶貝檔案，我們才能比對月齡營養目標。",
-    "goToOnboarding": "前往設定檔",
+    "goToOnboarding": "建立寶貝檔案",
     "resultsTitle": "今日餐盤分析",
     "foodsTitle": "辨識到的食物",
     "portionLabel": "{amount} {unit}（約 {grams}g）",
-    "nutrientsTitle": "關鍵營養素覆蓋率",
+    "nutrientsTitle": "全部營養素（vs. 每日目標）",
     "nutrientsHint": "目標是當日全部餐的累積，這頓是其中一份貢獻。",
+    "perFoodTitle": "每樣食物的貢獻",
+    "perFoodHint": "每樣食物對今天每日目標的貢獻比例。",
+    "showAllNutrients": "顯示全部營養素",
+    "hideExtraNutrients": "收起",
+    "ofTarget": "/ {target}{unit}",
+    "ofDaily": "佔每日目標",
     "allergenWarningTitle": "⚠️ 偵測到你已知的過敏原",
     "allergenWarningBody": "這盤可能含有以下已標註過敏原：{allergens}。餵食前請再次確認。",
     "faceDetectedError": "照片中有人臉，為保護隱私，我們無法分析。請只拍餐盤。",
@@ -152,7 +167,14 @@
     "unit_ml": "ml",
     "unit_g": "g",
     "disclaimer": "營養估算依 WHO/AAP 平均值，個別寶寶需求可能不同。",
-    "newFoodChip": "新食物"
+    "newFoodChip": "新食物",
+    "historyLink": "歷史",
+    "historyTitle": "餐點紀錄",
+    "historyEmpty": "還沒有餐點紀錄。拍下第一份餐盤就會出現在這裡。",
+    "viewAllMeals": "查看所有餐點",
+    "deleteMealConfirm": "刪除這份餐點紀錄？",
+    "noPhoto": "未保留照片",
+    "foodCount": "{n, plural, other {# 樣食物}}"
   },
   "Chat": {
     "title": "問 Nibble",
@@ -188,12 +210,15 @@
     "redFlagHint": "黑色、紅色、白色便便，或持續水便，可能需要醫師評估。",
     "save": "儲存紀錄",
     "saving": "儲存中⋯⋯",
+    "update": "更新紀錄",
+    "updating": "更新中⋯⋯",
+    "editTitle": "編輯紀錄",
     "historyLink": "歷史",
     "historyTitle": "便便紀錄",
     "newEntry": "新增紀錄",
     "emptyHistory": "還沒有紀錄。記錄第一筆，開始觀察寶貝的模式。",
     "noChildWarning": "請先建立寶貝檔案，才能連結紀錄。",
-    "goToOnboarding": "前往設定檔"
+    "goToOnboarding": "建立寶貝檔案"
   },
   "Sleep": {
     "title": "睡眠紀錄",
@@ -215,18 +240,18 @@
     "emptyList": "還沒有睡眠紀錄。",
     "invalidRange": "結束時間必須晚於開始時間。",
     "noChildWarning": "請先建立寶貝檔案。",
-    "goToOnboarding": "前往設定檔"
+    "goToOnboarding": "建立寶貝檔案"
   },
   "Milestones": {
     "title": "里程碑",
-    "currentBadge": "快到了",
+    "currentBadge": "目前階段",
     "achievedOn": "達成日期",
     "today": "今天",
     "noteLabel": "備註",
     "notePlaceholder": "留下一點回憶——在哪、誰看到、發生什麼。",
     "removeMilestone": "取消紀錄",
     "noChildWarning": "請先建立寶貝檔案，讓我們客製里程碑清單。",
-    "goToOnboarding": "前往設定檔"
+    "goToOnboarding": "建立寶貝檔案"
   },
   "Reactions": {
     "title": "過敏反應紀錄",
@@ -259,7 +284,7 @@
     "recentTitle": "最近紀錄",
     "emptyList": "還沒有過敏反應紀錄。",
     "noChildWarning": "請先建立寶貝檔案，才能連結反應紀錄。",
-    "goToOnboarding": "前往設定檔"
+    "goToOnboarding": "建立寶貝檔案"
   },
   "Pricing": {
     "title": "適合每個家庭的方案",
@@ -418,6 +443,6 @@
     "emptyList": "還沒有測量紀錄。",
     "disclaimer": "百分位需設定寶貝生理性別才能計算，依 WHO 生長標準。個別差異屬正常。",
     "noChildWarning": "請先建立寶貝檔案，才能計算百分位。",
-    "goToOnboarding": "前往設定檔"
+    "goToOnboarding": "建立寶貝檔案"
   }
 }

@@ -30,7 +30,9 @@ export default function PoopHistoryPage() {
 
   const loadPoops = usePoopStore((s) => s.loadFromStorage);
   const poopsLoaded = usePoopStore((s) => s.loaded);
-  const getPoopsForChild = usePoopStore((s) => s.getPoopsForChild);
+  // Subscribe to the array directly so the list re-renders after addPoop —
+  // selecting only the function gave a stable reference and missed updates.
+  const allPoops = usePoopStore((s) => s.poops);
   const removePoop = usePoopStore((s) => s.removePoop);
 
   useEffect(() => {
@@ -39,8 +41,15 @@ export default function PoopHistoryPage() {
   }, [loadChildren, loadPoops]);
 
   const entries = useMemo(
-    () => (activeChild ? getPoopsForChild(activeChild.id) : []),
-    [activeChild, getPoopsForChild],
+    () =>
+      activeChild
+        ? allPoops
+            .filter((p) => p.childId === activeChild.id)
+            .sort((a, b) =>
+              `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`),
+            )
+        : [],
+    [activeChild, allPoops],
   );
 
   const grouped = useMemo(() => groupByDate(entries), [entries]);
@@ -99,6 +108,7 @@ export default function PoopHistoryPage() {
                     locale={locale}
                     onDelete={() => removePoop(p.id)}
                     deleteLabel={tCommon("delete")}
+                    editLabel={tCommon("edit")}
                   />
                 ))}
               </ul>
@@ -115,11 +125,13 @@ function PoopRow({
   locale,
   onDelete,
   deleteLabel,
+  editLabel,
 }: {
   record: PoopRecord;
   locale: "zh-TW" | "en";
   onDelete: () => void;
   deleteLabel: string;
+  editLabel: string;
 }) {
   const bristol = BRISTOL_SCALE.find((b) => b.type === record.bristolType)!;
   const colorInfo = POOP_COLORS[record.color];
@@ -149,16 +161,25 @@ function PoopRow({
           </p>
         )}
       </div>
-      <button
-        type="button"
-        onClick={() => {
-          if (confirm(deleteLabel + "?")) onDelete();
-        }}
-        className="text-xs text-ink-faded hover:text-peach-deep px-2 py-1"
-        aria-label={deleteLabel}
-      >
-        ×
-      </button>
+      <div className="flex items-center gap-1 shrink-0">
+        <Link
+          href={{ pathname: "/app/poop/log", query: { edit: record.id } }}
+          className="text-xs text-ink-soft hover:text-sage-deep px-2 py-1"
+          aria-label={editLabel}
+        >
+          ✎
+        </Link>
+        <button
+          type="button"
+          onClick={() => {
+            if (confirm(deleteLabel + "?")) onDelete();
+          }}
+          className="text-base text-ink-faded hover:text-peach-deep px-2 py-1 leading-none"
+          aria-label={deleteLabel}
+        >
+          ×
+        </button>
+      </div>
     </li>
   );
 }
@@ -183,15 +204,15 @@ function groupByDate(records: PoopRecord[]): Array<[string, PoopRecord[]]> {
 }
 
 function formatDateHeader(date: string, locale: "zh-TW" | "en"): string {
-  // `date` is always "YYYY-MM-DD". Show "Today" / "Yesterday" where applicable.
-  const todayKey = dateKey(new Date());
-  if (date === todayKey) return locale === "en" ? "Today" : "今天";
-  const y = new Date();
-  y.setDate(y.getDate() - 1);
-  if (date === dateKey(y)) return locale === "en" ? "Yesterday" : "昨天";
-  return date;
-}
-
-function dateKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // `date` is always "YYYY-MM-DD". Render an absolute, locale-formatted
+  // date string — caregivers asked for the literal date so they can refer
+  // back to specific days when chatting with their pediatrician.
+  const [y, m, d] = date.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString(locale === "en" ? "en-US" : "zh-TW", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    weekday: "short",
+  });
 }

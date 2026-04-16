@@ -112,6 +112,16 @@ export default function AppDashboard() {
             }
           />
           <FeatureRow
+            href="/app/scan/history"
+            emoji="🥣"
+            title={locale === "en" ? "Meal history" : "餐點紀錄"}
+            sub={
+              locale === "en"
+                ? "Every plate you've scanned, with photos and nutrients"
+                : "歷次餐盤紀錄，含照片與營養素"
+            }
+          />
+          <FeatureRow
             href="/app/chat"
             emoji="💬"
             title={locale === "en" ? "Ask Nibble" : "問 Nibble"}
@@ -201,6 +211,7 @@ function FeatureRow({
 }: {
   href:
     | "/app/scan"
+    | "/app/scan/history"
     | "/app/chat"
     | "/app/poop/log"
     | "/app/poop/history"

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Link, useRouter } from "@/i18n/navigation";
+import { Link } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
 import {
   useSleepStore,
@@ -25,7 +25,6 @@ export default function SleepPage() {
   const locale = useLocale() as "zh-TW" | "en";
   const t = useTranslations("Sleep");
   const tCommon = useTranslations("Common");
-  const router = useRouter();
 
   const loadChildren = useChildProfileStore((s) => s.loadFromStorage);
   const childLoaded = useChildProfileStore((s) => s.loaded);
@@ -35,7 +34,9 @@ export default function SleepPage() {
   const sleepsLoaded = useSleepStore((s) => s.loaded);
   const addSleep = useSleepStore((s) => s.addSleep);
   const removeSleep = useSleepStore((s) => s.removeSleep);
-  const getSleepsForChild = useSleepStore((s) => s.getSleepsForChild);
+  // Subscribe to the array directly — selecting only the function gives a
+  // stable reference and the component never re-renders after addSleep.
+  const allSleeps = useSleepStore((s) => s.sleeps);
 
   useEffect(() => {
     loadChildren();
@@ -47,10 +48,18 @@ export default function SleepPage() {
   const [endAt, setEndAt] = useState<string>(() => nowLocalString());
   const [wakeEvents, setWakeEvents] = useState<number>(0);
   const [notes, setNotes] = useState<string>("");
+  // Transient confirmation so a successful save isn't silent — without
+  // this the form just resets and looks broken on iPhone.
+  const [savedToast, setSavedToast] = useState(false);
 
   const entries = useMemo(
-    () => (activeChild ? getSleepsForChild(activeChild.id) : []),
-    [activeChild, getSleepsForChild],
+    () =>
+      activeChild
+        ? allSleeps
+            .filter((s) => s.childId === activeChild.id)
+            .sort((a, b) => b.startAt.localeCompare(a.startAt))
+        : [],
+    [activeChild, allSleeps],
   );
 
   const totals = useMemo(() => computeTotals(entries), [entries]);
@@ -99,8 +108,10 @@ export default function SleepPage() {
     setEndAt(nowLocalString());
     setWakeEvents(0);
     setNotes("");
-    // Visual confirmation: bump the scroll so the new entry surfaces.
-    router.refresh();
+    // Visible confirmation — replaces the previous silent router.refresh()
+    // which made iPhone users think nothing happened.
+    setSavedToast(true);
+    setTimeout(() => setSavedToast(false), 2000);
   }
 
   return (
@@ -162,7 +173,9 @@ export default function SleepPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* Stack on mobile — datetime-local "DD/MM/YYYY, HH:MM" needs ~170px and
+              would truncate inside a half-width column on a 375px screen. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="block">
               <span className="block text-sm font-medium text-ink mb-1">
                 {t("startLabel")}
@@ -235,7 +248,7 @@ export default function SleepPage() {
             onClick={save}
             className="w-full px-8 py-4 rounded-full bg-sage-deep text-white font-semibold text-lg bubble-shadow hover:bg-sage-deep/90 transition"
           >
-            {t("save")}
+            {savedToast ? `✓ ${t("save")}` : t("save")}
           </button>
         </section>
 
@@ -321,8 +334,11 @@ function SleepRow({
 
 function SummaryCell({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="font-display text-2xl font-bold text-ink tabular-nums">
+    <div className="min-w-0">
+      {/* whitespace-nowrap + smaller base size so "2小時0分" stays on one line
+          inside the 1/3 mobile column. text-xl gives roughly 20px CJK glyphs,
+          which fits up to "12小時59分" without overflowing. */}
+      <p className="font-display text-xl sm:text-2xl font-bold text-ink tabular-nums whitespace-nowrap">
         {value}
       </p>
       <p className="text-[11px] text-ink-faded mt-0.5">{label}</p>
@@ -362,7 +378,9 @@ function formatHoursMinutes(total: number, locale: "zh-TW" | "en"): string {
   if (locale === "en") {
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
   }
-  return h > 0 ? `${h}小時 ${m}分` : `${m}分`;
+  // No space between 小時 and 分 — the space breaks across lines inside the
+  // narrow `今日總時數` summary cell on mobile.
+  return h > 0 ? `${h}小時${m}分` : `${m}分`;
 }
 
 function formatTimeRange(

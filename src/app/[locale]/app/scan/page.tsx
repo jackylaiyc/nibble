@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useRouter, Link } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
 import { useMealStore, type FoodItem, type PortionUnit } from "@/stores/mealStore";
-import { ageInfoFromDob } from "@/lib/pediatric/ageBucket";
+import { ageInfoFromDob, type AgeBucket } from "@/lib/pediatric/ageBucket";
 import {
   getAllergen,
   type AllergenKey,
@@ -93,18 +93,29 @@ export default function ScanPage() {
 
   const [paywallOpen, setPaywallOpen] = useState(false);
 
-  // Capture / preview state.
-  const fileRef = useRef<HTMLInputElement | null>(null);
+  // Capture / preview state. Two refs: one input forces the rear camera
+  // (`capture="environment"`), the other is a plain library picker.
+  // Splitting them lets the parent choose at the moment of upload instead
+  // of being shoehorned into a single iOS UA decision.
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const libraryInputRef = useRef<HTMLInputElement | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  // Hold the data URL alongside the File so we can persist it on save without
+  // re-reading the file (FileReader is async; ObjectURLs aren't serialisable).
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!file) {
       setPreview(null);
+      setPhotoDataUrl(null);
       return;
     }
     const url = URL.createObjectURL(file);
     setPreview(url);
+    // Compute the data URL eagerly. We downscale before saving so localStorage
+    // doesn't blow past its quota — most phones produce 4MB photos.
+    void compressToDataUrl(file).then(setPhotoDataUrl).catch(() => setPhotoDataUrl(null));
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
@@ -114,6 +125,7 @@ export default function ScanPage() {
   const [result, setResult] = useState<NutritionApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedToast, setSavedToast] = useState(false);
+  const [showAllNutrients, setShowAllNutrients] = useState(false);
 
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
@@ -158,12 +170,16 @@ export default function ScanPage() {
       });
       if (!res.ok) {
         const payload = (await res.json().catch(() => ({}))) as ApiErrorPayload;
+        // Always include status code so a silent network/auth failure is
+        // legible from the caregiver's screen instead of just "something
+        // went wrong" — that was the iPhone bug report.
+        const detail = `${res.status}: ${payload.error ?? "unknown"}`;
         setError(
           payload.code === "FACE_DETECTED"
             ? t("faceDetectedError")
             : payload.code === "NO_FOODS"
               ? t("noFoodsError")
-              : t("genericError", { message: payload.error ?? "unknown" }),
+              : t("genericError", { message: detail }),
         );
         return;
       }
@@ -204,6 +220,7 @@ export default function ScanPage() {
       time,
       notes: "",
       aiAnalyzed: true,
+      photoDataUrl: photoDataUrl ?? undefined,
     });
     setSavedToast(true);
     // Give the toast a beat, then go home.
@@ -275,9 +292,15 @@ export default function ScanPage() {
           <Link href="/app" className="text-ink-soft hover:text-ink">
             ←
           </Link>
-          <h1 className="font-display text-lg font-semibold text-ink">
+          <h1 className="font-display text-lg font-semibold text-ink flex-1">
             {t("title")}
           </h1>
+          <Link
+            href="/app/scan/history"
+            className="text-xs font-medium text-ink-soft hover:text-ink"
+          >
+            {t("historyLink")}
+          </Link>
         </div>
       </header>
 
@@ -296,30 +319,56 @@ export default function ScanPage() {
                 className="w-full max-h-[420px] object-contain"
               />
               {!result && (
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  className="absolute bottom-3 right-3 rounded-full bg-white/90 backdrop-blur text-ink text-sm font-medium px-4 py-2 bubble-shadow"
-                >
-                  {t("retake")}
-                </button>
+                <div className="absolute bottom-3 right-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => libraryInputRef.current?.click()}
+                    className="rounded-full bg-white/90 backdrop-blur text-ink text-sm font-medium px-4 py-2 bubble-shadow"
+                  >
+                    🖼️ {t("fromLibrary")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="rounded-full bg-white/90 backdrop-blur text-ink text-sm font-medium px-4 py-2 bubble-shadow"
+                  >
+                    📸 {t("retake")}
+                  </button>
+                </div>
               )}
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="w-full aspect-[4/3] rounded-bubble bg-white border-2 border-dashed border-border flex flex-col items-center justify-center gap-3 text-ink-soft hover:border-peach-deep hover:text-peach-deep transition"
-            >
-              <div className="text-5xl">📸</div>
-              <span className="font-medium">{t("choosePhoto")}</span>
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                className="aspect-[4/3] rounded-bubble bg-white border-2 border-dashed border-border flex flex-col items-center justify-center gap-3 text-ink-soft hover:border-peach-deep hover:text-peach-deep transition"
+              >
+                <div className="text-5xl">📸</div>
+                <span className="font-medium text-center px-2">{t("choosePhoto")}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => libraryInputRef.current?.click()}
+                className="aspect-[4/3] rounded-bubble bg-white border-2 border-dashed border-border flex flex-col items-center justify-center gap-3 text-ink-soft hover:border-sage-deep hover:text-sage-deep transition"
+              >
+                <div className="text-5xl">🖼️</div>
+                <span className="font-medium text-center px-2">{t("fromLibrary")}</span>
+              </button>
+            </div>
           )}
           <input
-            ref={fileRef}
+            ref={cameraInputRef}
             type="file"
             accept="image/*"
             capture="environment"
+            onChange={onPickFile}
+            className="hidden"
+          />
+          <input
+            ref={libraryInputRef}
+            type="file"
+            accept="image/*"
             onChange={onPickFile}
             className="hidden"
           />
@@ -382,7 +431,7 @@ export default function ScanPage() {
                       .map(
                         (k) => `${getAllergen(k)?.emoji ?? ""} ${getAllergen(k)?.label[locale] ?? k}`,
                       )
-                      .join("、"),
+                      .join(locale === "en" ? ", " : "、"),
                   })}
                 </p>
               </div>
@@ -433,7 +482,7 @@ export default function ScanPage() {
               </ul>
             </div>
 
-            {/* RDA rings */}
+            {/* RDA rings — priority + expandable full list */}
             <div>
               <h2 className="font-display font-semibold text-ink mb-1">
                 {t("nutrientsTitle")}
@@ -473,6 +522,37 @@ export default function ScanPage() {
                   );
                 })}
               </div>
+
+              {/* Expandable: every other tracked nutrient as a slim bar row.
+                  Caregivers asked to see iron AND vitamin C AND fiber AND
+                  everything else, not just the age-bucket priority three. */}
+              <button
+                type="button"
+                onClick={() => setShowAllNutrients((v) => !v)}
+                className="mt-3 w-full text-sm font-medium text-sage-deep hover:text-ink py-2 rounded-card border border-border bg-white"
+              >
+                {showAllNutrients ? t("hideExtraNutrients") : t("showAllNutrients")}
+              </button>
+              {showAllNutrients && (
+                <div className="mt-3 rounded-bubble bg-white card-pop p-5 space-y-3">
+                  {coverage
+                    .filter((c) => !priorityNutrients.includes(c.nutrient))
+                    .map((cell) => (
+                      <NutrientBar
+                        key={cell.nutrient}
+                        label={NUTRIENT_LABELS[cell.nutrient][locale]}
+                        emoji={NUTRIENT_LABELS[cell.nutrient].emoji}
+                        actual={cell.actual}
+                        target={cell.target.value}
+                        unit={cell.target.unit}
+                        coverage={cell.coverage}
+                        isUpperLimit={!!cell.target.isUpperLimit}
+                        locale={locale}
+                      />
+                    ))}
+                </div>
+              )}
+
               <p className="mt-3 text-[11px] text-ink-faded text-center">
                 {t("disclaimer")} · {DISCLAIMERS.rdaResults[locale]}
               </p>
@@ -496,6 +576,33 @@ export default function ScanPage() {
                   }}
                 />
               </div>
+            </div>
+
+            {/* Per-food breakdown — for each identified food, show how it
+                contributes to the priority nutrients today. Helps parents
+                see "this is where the iron came from". */}
+            <div>
+              <h2 className="font-display font-semibold text-ink mb-1">
+                {t("perFoodTitle")}
+              </h2>
+              <p className="text-xs text-ink-faded mb-4">{t("perFoodHint")}</p>
+              <ul className="space-y-3">
+                {result.foods.map((food, i) => (
+                  <PerFoodCard
+                    key={`${food.nameEn}-${i}`}
+                    name={food.name}
+                    portionLabel={t("portionLabel", {
+                      amount: food.portionAmount,
+                      unit: t(`unit_${food.portionUnit}` as "unit_tsp"),
+                      grams: Math.round(food.gramsEstimate),
+                    })}
+                    nutrients={food.nutrients}
+                    bucket={bucket}
+                    priorityNutrients={priorityNutrients}
+                    locale={locale}
+                  />
+                ))}
+              </ul>
             </div>
           </section>
         )}
@@ -543,6 +650,152 @@ export default function ScanPage() {
   );
 }
 
+// ─── components ────────────────────────────────────────────────────────────
+
+/**
+ * Slim percent-bar row for a single nutrient — used in the "show all" panel
+ * so parents can scan the secondary nutrients without giving them ring real
+ * estate.
+ */
+function NutrientBar({
+  label,
+  emoji,
+  actual,
+  target,
+  unit,
+  coverage,
+  isUpperLimit,
+  locale,
+}: {
+  label: string;
+  emoji: string;
+  actual: number;
+  target: number;
+  unit: string;
+  coverage: number;
+  isUpperLimit: boolean;
+  locale: "zh-TW" | "en";
+}) {
+  const pct = Math.min(coverage, 1.5) * 100;
+  // Color rules differ for limits vs. RDAs: under-cap is good for sodium,
+  // bad for iron. Same color logic the rings use.
+  const color = isUpperLimit
+    ? coverage > 1
+      ? "bg-peach-deep"
+      : "bg-sage-deep"
+    : coverage >= 0.9
+      ? coverage > 1.5
+        ? "bg-butter-deep"
+        : "bg-sage-deep"
+      : coverage >= 0.5
+        ? "bg-butter-deep"
+        : "bg-peach";
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1">
+        <span className="text-sm font-medium text-ink flex items-center gap-1.5">
+          <span>{emoji}</span>
+          <span>{label}</span>
+        </span>
+        <span className="text-xs text-ink-faded tabular-nums">
+          {Math.round(actual * 10) / 10}{unit} / {target}{unit}{" "}
+          <span className="font-semibold text-ink ml-1">
+            {Math.round(coverage * 100)}%
+          </span>
+        </span>
+      </div>
+      <div className="h-2.5 rounded-full bg-cream overflow-hidden">
+        <div
+          className={`h-full ${color} rounded-full transition-all duration-700`}
+          style={{ width: `${Math.max(2, pct)}%` }}
+          aria-label={`${Math.round(coverage * 100)}% of ${target}${unit} ${locale === "en" ? "daily target" : "每日目標"}`}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Card for one food showing its top-contributing nutrients to today's daily
+ * RDA. We ignore zero/trivial entries so a piece of broccoli doesn't have
+ * fourteen 0% lines.
+ */
+function PerFoodCard({
+  name,
+  portionLabel,
+  nutrients,
+  bucket,
+  priorityNutrients,
+  locale,
+}: {
+  name: string;
+  portionLabel: string;
+  nutrients: NutrientTotals;
+  bucket: AgeBucket;
+  priorityNutrients: Nutrient[];
+  locale: "zh-TW" | "en";
+}) {
+  const targets = RDA[bucket];
+
+  // Walk every tracked nutrient, compute its share of the daily target,
+  // sort priority-aware so iron/zinc/calcium win ties even at small contributions.
+  const rows = (Object.keys(targets) as Nutrient[])
+    .map((n) => {
+      const actual = nutrients[n] ?? 0;
+      const target = targets[n].value;
+      const coverage = target > 0 ? actual / target : 0;
+      return {
+        nutrient: n,
+        actual,
+        target,
+        coverage,
+        unit: targets[n].unit,
+        isUpperLimit: !!targets[n].isUpperLimit,
+        priority: priorityNutrients.includes(n),
+      };
+    })
+    .filter((r) => r.actual > 0 && r.coverage >= 0.01)
+    .sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority ? -1 : 1;
+      return b.coverage - a.coverage;
+    })
+    .slice(0, 6);
+
+  return (
+    <li className="rounded-bubble bg-white card-pop p-4">
+      <div className="flex items-baseline justify-between mb-3">
+        <div className="min-w-0">
+          <p className="font-display font-semibold text-ink truncate">{name}</p>
+          <p className="text-xs text-ink-faded">{portionLabel}</p>
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-xs text-ink-faded">
+          {locale === "en"
+            ? "No significant nutrient contribution."
+            : "對主要營養素貢獻較少。"}
+        </p>
+      ) : (
+        <div className="space-y-2.5">
+          {rows.map((r) => (
+            <NutrientBar
+              key={r.nutrient}
+              label={NUTRIENT_LABELS[r.nutrient][locale]}
+              emoji={NUTRIENT_LABELS[r.nutrient].emoji}
+              actual={r.actual}
+              target={r.target}
+              unit={r.unit}
+              coverage={r.coverage}
+              isUpperLimit={r.isUpperLimit}
+              locale={locale}
+            />
+          ))}
+        </div>
+      )}
+    </li>
+  );
+}
+
 // ─── helpers ──────────────────────────────────────────────────────────────
 
 function fileToBase64(file: File): Promise<string> {
@@ -563,10 +816,51 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+/**
+ * Downscale an image and return a JPEG data URL. Phones produce 4–8MB
+ * photos; localStorage caps at ~5MB across the entire origin, so we shrink
+ * to 800px on the long edge before persisting. Used for thumbnails — the
+ * full-quality file still goes to Gemini for analysis.
+ */
+function compressToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      if (typeof dataUrl !== "string") {
+        reject(new Error("Reader returned non-string"));
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        const maxEdge = 800;
+        const ratio = Math.min(1, maxEdge / Math.max(img.width, img.height));
+        const w = Math.round(img.width * ratio);
+        const h = Math.round(img.height * ratio);
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          // Canvas unavailable (rare) — fall back to the original data URL.
+          resolve(dataUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        try {
+          resolve(canvas.toDataURL("image/jpeg", 0.7));
+        } catch {
+          resolve(dataUrl);
+        }
+      };
+      img.onerror = () => reject(new Error("Image decode failed"));
+      img.src = dataUrl;
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Reader error"));
+    reader.readAsDataURL(file);
+  });
+}
+
 function cap<T extends string>(s: T): Capitalize<T> {
   return (s.charAt(0).toUpperCase() + s.slice(1)) as Capitalize<T>;
 }
-
-// Silence unused imports on the nutrient label map — keep for future
-// ring-level tooltips with localized nutrient names.
-void NUTRIENT_LABELS;

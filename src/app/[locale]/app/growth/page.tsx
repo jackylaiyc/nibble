@@ -60,7 +60,9 @@ export default function GrowthPage() {
   const gLoaded = useGrowthStore((s) => s.loaded);
   const addMeasurement = useGrowthStore((s) => s.addMeasurement);
   const removeMeasurement = useGrowthStore((s) => s.removeMeasurement);
-  const getForChild = useGrowthStore((s) => s.getMeasurementsForChild);
+  // Subscribe to the array directly so the chart and list update after
+  // addMeasurement — selecting only the function gave a stable reference.
+  const allMeasurements = useGrowthStore((s) => s.measurements);
 
   useEffect(() => {
     loadChildren();
@@ -74,8 +76,13 @@ export default function GrowthPage() {
   const [notes, setNotes] = useState("");
 
   const entries = useMemo(
-    () => (activeChild ? getForChild(activeChild.id) : []),
-    [activeChild, getForChild],
+    () =>
+      activeChild
+        ? allMeasurements
+            .filter((m) => m.childId === activeChild.id)
+            .sort((a, b) => a.date.localeCompare(b.date))
+        : [],
+    [activeChild, allMeasurements],
   );
 
   const chartRows: ChartRow[] = useMemo(() => {

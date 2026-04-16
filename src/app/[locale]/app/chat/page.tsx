@@ -71,7 +71,11 @@ export default function ChatPage() {
   const addMessage = useChatStore((s) => s.addMessage);
   const popLastAssistant = useChatStore((s) => s.popLastAssistant);
   const resetThread = useChatStore((s) => s.resetThread);
-  const messagesFor = useChatStore((s) => s.messagesFor);
+  // Subscribe to the array directly so the assistant reply appears as soon
+  // as it lands. Selecting only the function gave a stable reference and
+  // the bubble silently never appeared — that was the "AI doesn't respond"
+  // bug from the iPhone smoke test.
+  const allMessages = useChatStore((s) => s.messages);
 
   useEffect(() => {
     loadChildren();
@@ -89,8 +93,9 @@ export default function ChatPage() {
   }, [childLoaded, activeChild, router]);
 
   const messages = useMemo(
-    () => (activeChild ? messagesFor(activeChild.id) : []),
-    [activeChild, messagesFor],
+    () =>
+      activeChild ? allMessages.filter((m) => m.childId === activeChild.id) : [],
+    [activeChild, allMessages],
   );
 
   const [input, setInput] = useState("");
@@ -122,6 +127,14 @@ export default function ChatPage() {
       }
     }
 
+    // Build the API turn list BEFORE we add the new message to the store —
+    // otherwise the message is included in `messages` and we'd send it twice.
+    // We then add the bounded prior + the fresh user turn.
+    const priorForApi = messages
+      .slice(-19)
+      .map((m) => ({ role: m.role, content: m.content }));
+    const apiMessages = [...priorForApi, { role: "user" as const, content: text }];
+
     addMessage({
       childId: activeChild.id,
       role: "user",
@@ -130,14 +143,6 @@ export default function ChatPage() {
     setInput("");
     setSending(true);
     setError(null);
-
-    // Rebuild the full turn list we send to the API. Keep it bounded so
-    // Gemini doesn't choke on a months-long thread — last 20 turns is plenty
-    // for contextual follow-ups.
-    const priorForApi = messagesFor(activeChild.id)
-      .slice(-19)
-      .map((m) => ({ role: m.role, content: m.content }));
-    const apiMessages = [...priorForApi, { role: "user" as const, content: text }];
 
     try {
       const bucket = ageInfoFromDob(activeChild.dob).bucket;
@@ -157,7 +162,21 @@ export default function ChatPage() {
         }),
       });
       if (!res.ok) {
-        setError(t("error"));
+        // Surface the server's actual error so the caregiver knows whether
+        // it was rate-limit, network, or a deeper issue. We keep the i18n
+        // umbrella message and append the technical hint underneath.
+        const detail = await res
+          .text()
+          .then((t) => {
+            try {
+              const j = JSON.parse(t) as { error?: string };
+              return j.error ?? t;
+            } catch {
+              return t;
+            }
+          })
+          .catch(() => `HTTP ${res.status}`);
+        setError(`${t("error")} (${res.status}: ${detail.slice(0, 120)})`);
         setSending(false);
         return;
       }
@@ -177,8 +196,9 @@ export default function ChatPage() {
         toolCall: data.toolCall,
       });
       recordUsage("chat");
-    } catch {
-      setError(t("error"));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`${t("error")} (${msg.slice(0, 120)})`);
       popLastAssistant();
     } finally {
       setSending(false);

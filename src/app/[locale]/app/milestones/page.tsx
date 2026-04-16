@@ -44,7 +44,11 @@ export default function MilestonesPage() {
   const msLoaded = useMilestoneStore((s) => s.loaded);
   const upsert = useMilestoneStore((s) => s.upsertMilestone);
   const remove = useMilestoneStore((s) => s.removeMilestone);
-  const getForChild = useMilestoneStore((s) => s.getMilestoneForChild);
+  // Subscribe to the array directly so unlocking a tile re-renders the
+  // grid. Selecting only the lookup function gave a stable reference.
+  const allMilestones = useMilestoneStore((s) => s.milestones);
+  const getForChild = (childId: string, key: MilestoneKey) =>
+    allMilestones.find((m) => m.childId === childId && m.key === key);
 
   useEffect(() => {
     loadChildren();

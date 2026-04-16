@@ -77,18 +77,18 @@ export default function LandingPage({
           <div className="flex items-center gap-3">
             <div className="size-12 rounded-2xl bg-butter flex items-center justify-center text-2xl">🥣</div>
             <div>
-              <p className="font-display font-semibold text-ink">早餐 · 8:42 AM</p>
-              <p className="text-xs text-ink-faded">9 個月 · BLW 模式</p>
+              <p className="font-display font-semibold text-ink">{t("demoMealLabel")}</p>
+              <p className="text-xs text-ink-faded">{t("demoChildLabel")}</p>
             </div>
-            <span className="ml-auto text-xs font-medium text-sage-deep bg-sage/30 rounded-full px-3 py-1">AI 分析完成</span>
+            <span className="ml-auto text-xs font-medium text-sage-deep bg-sage/30 rounded-full px-3 py-1">{t("demoStatus")}</span>
           </div>
           <div className="mt-4 grid grid-cols-3 gap-3">
-            <NutrientRing emoji="⚙️" label="鐵" pct={72} color="#6fb38a" />
-            <NutrientRing emoji="✨" label="鋅" pct={48} color="#f5cf66" />
-            <NutrientRing emoji="🦴" label="鈣" pct={91} color="#a8d5ba" />
+            <NutrientRing emoji="⚙️" label={t("demoNutrientIron")} pct={72} color="#6fb38a" />
+            <NutrientRing emoji="✨" label={t("demoNutrientZinc")} pct={48} color="#f5cf66" />
+            <NutrientRing emoji="🦴" label={t("demoNutrientCalcium")} pct={91} color="#a8d5ba" />
           </div>
           <p className="mt-4 text-sm text-ink-soft leading-relaxed">
-            今日鐵質差一點 — 建議晚餐加一點紅肉泥或蛋黃 🥚
+            {t("demoSuggestion")}
           </p>
         </div>
       </section>

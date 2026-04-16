@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
@@ -28,28 +29,66 @@ import { DISCLAIMERS } from "@/lib/pediatric/disclaimers";
  */
 
 export default function PoopLogPage() {
+  // Wrap the body so useSearchParams doesn't trigger a CSR bailout warning.
+  return (
+    <Suspense fallback={null}>
+      <PoopLogPageInner />
+    </Suspense>
+  );
+}
+
+function PoopLogPageInner() {
   const locale = useLocale() as "zh-TW" | "en";
   const t = useTranslations("Poop");
   const tCommon = useTranslations("Common");
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
 
   const loadChildren = useChildProfileStore((s) => s.loadFromStorage);
   const childLoaded = useChildProfileStore((s) => s.loaded);
   const activeChild = useChildProfileStore((s) => s.getActiveChild());
 
   const loadPoops = usePoopStore((s) => s.loadFromStorage);
+  const poopsLoaded = usePoopStore((s) => s.loaded);
+  const allPoops = usePoopStore((s) => s.poops);
   const addPoop = usePoopStore((s) => s.addPoop);
+  const updatePoop = usePoopStore((s) => s.updatePoop);
 
   useEffect(() => {
     loadChildren();
     loadPoops();
   }, [loadChildren, loadPoops]);
 
+  // Look up the record we're editing (if any) — null means "new entry".
+  const editingRecord = useMemo(
+    () => (editId ? allPoops.find((p) => p.id === editId) ?? null : null),
+    [editId, allPoops],
+  );
+  const isEditing = editingRecord !== null;
+
   const [bristol, setBristol] = useState<BristolType>(4);
   const [color, setColor] = useState<PoopColor>("yellow");
   const [time, setTime] = useState<string>(() => currentHHMM());
+  const [date, setDate] = useState<string>(() => todayKey());
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [hydratedFromEdit, setHydratedFromEdit] = useState(false);
+
+  // Once the store has loaded and we have an edit target, prefill the form.
+  // We guard with `hydratedFromEdit` so subsequent re-renders don't clobber
+  // the caregiver's edits while they're typing.
+  useEffect(() => {
+    if (!poopsLoaded || hydratedFromEdit) return;
+    if (editingRecord) {
+      setBristol(editingRecord.bristolType);
+      setColor(editingRecord.color);
+      setTime(editingRecord.time);
+      setDate(editingRecord.date);
+      setNotes(editingRecord.notes);
+    }
+    setHydratedFromEdit(true);
+  }, [poopsLoaded, editingRecord, hydratedFromEdit]);
 
   const redFlag = useMemo(
     () => shouldReferToPediatrician(bristol, color),
@@ -84,16 +123,24 @@ export default function PoopLogPage() {
   function save() {
     if (!activeChild) return;
     setSaving(true);
-    const now = new Date();
-    const date = now.toISOString().slice(0, 10);
-    addPoop({
-      childId: activeChild.id,
-      date,
-      time,
-      bristolType: bristol,
-      color,
-      notes,
-    });
+    if (isEditing && editingRecord) {
+      updatePoop(editingRecord.id, {
+        date,
+        time,
+        bristolType: bristol,
+        color,
+        notes,
+      });
+    } else {
+      addPoop({
+        childId: activeChild.id,
+        date,
+        time,
+        bristolType: bristol,
+        color,
+        notes,
+      });
+    }
     // Small delay so the button state is visible before the route change.
     setTimeout(() => router.push("/app/poop/history"), 300);
   }
@@ -107,7 +154,7 @@ export default function PoopLogPage() {
             ←
           </Link>
           <h1 className="font-display text-lg font-semibold text-ink flex-1">
-            {t("title")}
+            {isEditing ? t("editTitle") : t("title")}
           </h1>
           <Link
             href="/app/poop/history"
@@ -206,17 +253,31 @@ export default function PoopLogPage() {
           </div>
         )}
 
-        {/* Time */}
-        <section>
-          <label className="block font-display font-semibold text-ink mb-2">
-            {t("timeLabel")}
-          </label>
-          <input
-            type="time"
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-            className="w-full rounded-card bg-white border border-border px-4 py-3 text-ink font-medium tabular-nums"
-          />
+        {/* Date + Time */}
+        <section className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block font-display font-semibold text-ink mb-2">
+              {locale === "en" ? "Date" : "日期"}
+            </label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              max={todayKey()}
+              className="w-full rounded-card bg-white border border-border px-4 py-3 text-ink font-medium tabular-nums"
+            />
+          </div>
+          <div>
+            <label className="block font-display font-semibold text-ink mb-2">
+              {t("timeLabel")}
+            </label>
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="w-full rounded-card bg-white border border-border px-4 py-3 text-ink font-medium tabular-nums"
+            />
+          </div>
         </section>
 
         {/* Notes */}
@@ -249,7 +310,13 @@ export default function PoopLogPage() {
             disabled={saving}
             className="w-full px-8 py-4 rounded-full bg-sage-deep text-white font-semibold text-lg bubble-shadow hover:bg-sage-deep/90 transition disabled:opacity-60"
           >
-            {saving ? t("saving") : t("save")}
+            {saving
+              ? isEditing
+                ? t("updating")
+                : t("saving")
+              : isEditing
+                ? t("update")
+                : t("save")}
           </button>
         </div>
       </nav>
@@ -262,6 +329,11 @@ export default function PoopLogPage() {
 function currentHHMM(): string {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function severityBgClass(

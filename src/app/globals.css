@@ -93,3 +93,41 @@ body {
     0 1px 0 rgba(255, 255, 255, 0.8) inset,
     0 8px 24px -12px rgba(0, 0, 0, 0.1);
 }
+
+/*
+ * iOS Safari renders <input type="time"> and <input type="datetime-local">
+ * with the displayed value collapsed into a small inline ::-webkit-date-and-time-value
+ * box that ignores the parent's width. The result on iPhone is a tiny
+ * value text floating mid-input while the box itself is the right size,
+ * which reads as broken alignment. We force the value to fill the input,
+ * left-align it, and reserve a comfortable tap height so the field
+ * matches the surrounding text inputs.
+ */
+input[type="time"],
+input[type="datetime-local"],
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: left;
+  min-height: 3rem;
+  font: inherit;
+}
+
+input[type="time"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value,
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  display: block;
+  width: 100%;
+  min-height: 1.5rem;
+  margin: 0;
+}
+
+/* iOS also shrinks the calendar/clock indicator; keep it visible but
+ * out of the way so it doesn't fight the value text. */
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.6;
+  cursor: pointer;
+}

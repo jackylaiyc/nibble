@@ -31,6 +31,10 @@ interface PoopState {
   loaded: boolean;
   loadFromStorage: () => void;
   addPoop: (record: Omit<PoopRecord, "id" | "createdAt">) => string;
+  updatePoop: (
+    id: string,
+    updates: Partial<Omit<PoopRecord, "id" | "createdAt">>,
+  ) => void;
   removePoop: (id: string) => void;
   getPoopsForChild: (childId: string) => PoopRecord[];
   getPoopsForDate: (childId: string, date: Date) => PoopRecord[];
@@ -81,6 +85,14 @@ export const usePoopStore = create<PoopState>((set, get) => ({
     set({ poops: updated });
     savePoops(updated);
     return id;
+  },
+
+  updatePoop: (id, updates) => {
+    const updated = get().poops.map((p) =>
+      p.id === id ? { ...p, ...updates } : p,
+    );
+    set({ poops: updated });
+    savePoops(updated);
   },
 
   removePoop: (id) => {

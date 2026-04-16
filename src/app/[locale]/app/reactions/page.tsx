@@ -64,7 +64,9 @@ export default function ReactionsPage() {
   const rLoaded = useReactionStore((s) => s.loaded);
   const addReaction = useReactionStore((s) => s.addReaction);
   const removeReaction = useReactionStore((s) => s.removeReaction);
-  const getReactionsForChild = useReactionStore((s) => s.getReactionsForChild);
+  // Subscribe to the array directly so the list updates after addReaction —
+  // selecting only the function gave a stable reference and missed updates.
+  const allReactions = useReactionStore((s) => s.reactions);
 
   useEffect(() => {
     loadChildren();
@@ -82,8 +84,15 @@ export default function ReactionsPage() {
   const [notes, setNotes] = useState("");
 
   const entries = useMemo(
-    () => (activeChild ? getReactionsForChild(activeChild.id) : []),
-    [activeChild, getReactionsForChild],
+    () =>
+      activeChild
+        ? allReactions
+            .filter((r) => r.childId === activeChild.id)
+            .sort((a, b) =>
+              `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`),
+            )
+        : [],
+    [activeChild, allReactions],
   );
 
   const severeOrModerate = severity === "severe" || severity === "moderate";

@@ -276,11 +276,6 @@ export default function PricingPage() {
           <p className="mt-2 text-sm text-ink-soft max-w-xl mx-auto leading-relaxed">
             {t("foundingBody")}
           </p>
-          <p className="mt-1 text-[11px] text-ink-faded">
-            {locale === "en"
-              ? `Limited to ${FOUNDING_MEMBER.seatsCap} seats`
-              : `限量 ${FOUNDING_MEMBER.seatsCap} 席`}
-          </p>
         </section>
 
         {/* FAQ */}
