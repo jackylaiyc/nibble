@@ -51,25 +51,34 @@ export async function POST(req: Request) {
     );
   }
 
-  const res = await fetch(
-    `https://api.resend.com/audiences/${audienceId}/contacts`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://api.resend.com/audiences/${audienceId}/contacts`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          unsubscribed: false,
+          first_name: undefined,
+          // Resend audiences don't support arbitrary tags, so we pack locale +
+          // source into the contact's metadata-adjacent last_name field as a
+          // dumb tag. When we outgrow this, switch to a real CRM.
+          last_name: [body.locale, body.source].filter(Boolean).join(":") || undefined,
+        }),
       },
-      body: JSON.stringify({
-        email,
-        unsubscribed: false,
-        first_name: undefined,
-        // Resend audiences don't support arbitrary tags, so we pack locale +
-        // source into the contact's metadata-adjacent last_name field as a
-        // dumb tag. When we outgrow this, switch to a real CRM.
-        last_name: [body.locale, body.source].filter(Boolean).join(":") || undefined,
-      }),
-    },
-  );
+    );
+  } catch (err) {
+    // Network blip or DNS hiccup talking to Resend. Log details server-side;
+    // the client just gets a generic 502 so we don't leak the upstream URL
+    // or stack into the response.
+    console.error("[newsletter] resend fetch failed", err);
+    return NextResponse.json({ error: "resend_unreachable" }, { status: 502 });
+  }
 
   if (!res.ok) {
     // 409 = already exists in audience; treat as success so repeat submits
