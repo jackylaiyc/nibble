@@ -177,8 +177,8 @@ export default function AppDashboard() {
             title={locale === "en" ? "Growth" : "生長曲線"}
             sub={
               locale === "en"
-                ? "Weight / height / head with WHO percentiles"
-                : "體重 / 身高 / 頭圍 WHO 百分位"
+                ? "Weight / height / head trend chart"
+                : "體重 / 身高 / 頭圍 趨勢圖"
             }
           />
         </div>

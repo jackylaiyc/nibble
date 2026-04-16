@@ -85,8 +85,8 @@ export function PaywallModal({
           <li className="flex items-center gap-2">
             <span className="text-sage-deep font-semibold">✓</span>
             {L(
-              "Full WHO growth percentiles + PDF reports",
-              "完整 WHO 生長百分位 + PDF 報告",
+              "Full growth trend chart + PDF reports",
+              "完整生長趨勢圖 + PDF 報告",
             )}
           </li>
           <li className="flex items-center gap-2">
