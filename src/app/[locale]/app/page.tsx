@@ -184,11 +184,30 @@ export default function AppDashboard() {
         </div>
       </section>
 
-      {/* Back-to-onboarding debug link (remove once auth is wired). */}
+      {/* Back-to-onboarding debug link (remove once auth is wired).
+          Truly resets local state so the label matches behavior — the link
+          previously just navigated to /onboarding, which left siblings and
+          scanned meals lurking in localStorage. */}
       <div className="max-w-xl mx-auto px-6 mt-10 text-center">
-        <Link href="/onboarding" className="text-xs text-ink-faded underline">
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window === "undefined") return;
+            const confirmMsg =
+              locale === "en"
+                ? "This will erase all local data (children, meals, logs) and restart onboarding. Continue?"
+                : "這會清除所有本機資料（小孩、餐點、紀錄）並重新開始引導流程，確定？";
+            if (!window.confirm(confirmMsg)) return;
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+              const key = localStorage.key(i);
+              if (key && key.startsWith("nibble_")) localStorage.removeItem(key);
+            }
+            router.replace("/onboarding");
+          }}
+          className="text-xs text-ink-faded underline"
+        >
           {locale === "en" ? "Start over (debug)" : "重新開始（偵錯）"}
-        </Link>
+        </button>
       </div>
     </main>
   );
