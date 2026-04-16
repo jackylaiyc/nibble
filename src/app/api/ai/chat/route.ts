@@ -393,10 +393,23 @@ export async function POST(request: NextRequest) {
   try {
     gemini = await callGemini(body.messages, body.child, locale);
   } catch (err) {
+    // Log the full error server-side; never echo internals (env var names,
+    // upstream API responses) to the client — those leak operator metadata
+    // and confuse caregivers who see them in the chat error pill.
     console.error("Gemini chat error:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    const isConfigIssue = message.includes("GOOGLE_GEMINI_API_KEY");
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Gemini call failed" },
-      { status: 502 },
+      {
+        error: isConfigIssue
+          ? locale === "en"
+            ? "AI service is not configured yet."
+            : "AI 服務尚未設定。"
+          : locale === "en"
+            ? "AI service is temporarily unavailable. Please try again."
+            : "AI 服務暫時無法使用，請稍後再試。",
+      },
+      { status: isConfigIssue ? 503 : 502 },
     );
   }
 

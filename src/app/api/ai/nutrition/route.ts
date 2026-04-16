@@ -401,13 +401,20 @@ export async function POST(request: NextRequest) {
   try {
     gemini = await identifyWithGemini(image, mimeType, ageBucket, knownAllergens);
   } catch (err) {
+    // Log the full error server-side; never echo internals (env var names,
+    // upstream API responses) to the client. Distinguish missing-key from
+    // generic failure so the UI can present the right tone.
     console.error("Gemini call failed:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    const isConfigIssue = message.includes("GOOGLE_GEMINI_API_KEY");
     return NextResponse.json<ErrorPayload>(
       {
-        error: err instanceof Error ? err.message : "Gemini call failed",
-        code: "GEMINI_FAILED",
+        error: isConfigIssue
+          ? "AI service is not configured."
+          : "AI service is temporarily unavailable. Please try again.",
+        code: isConfigIssue ? "AI_NOT_CONFIGURED" : "GEMINI_FAILED",
       },
-      { status: 502 },
+      { status: isConfigIssue ? 503 : 502 },
     );
   }
 
