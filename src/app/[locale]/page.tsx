@@ -2,6 +2,7 @@ import { useTranslations } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
 import Link from "next/link";
 import { use } from "react";
+import { NewsletterForm } from "@/components/marketing/NewsletterForm";
 
 /**
  * Landing page — marketing, not app-shell.
@@ -55,7 +56,7 @@ export default function LandingPage({
 
           <div className="mt-10 flex flex-col sm:flex-row gap-3 justify-center">
             <Link
-              href="/register"
+              href="/onboarding"
               className="inline-flex items-center justify-center gap-2 rounded-full bg-peach-deep text-white font-semibold px-8 py-4 text-lg bubble-shadow hover:bg-peach-deep/90 transition"
             >
               {t("heroCta")} →
@@ -161,11 +162,26 @@ export default function LandingPage({
           </h2>
           <p className="mt-4 text-lg text-ink-soft">{t("finalCtaDesc")}</p>
           <Link
-            href="/register"
+            href="/onboarding"
             className="mt-8 inline-flex items-center justify-center gap-2 rounded-full bg-peach-deep text-white font-semibold px-10 py-4 text-lg bubble-shadow hover:bg-peach-deep/90 transition"
           >
             {t("finalCta")} →
           </Link>
+        </div>
+      </section>
+
+      {/* Email capture — for folks who bounce past the trial CTA */}
+      <section className="px-6 py-16 bg-white border-t border-border">
+        <div className="mx-auto max-w-xl text-center">
+          <h3 className="font-display text-2xl md:text-3xl font-bold text-ink">
+            {t("emailCaptureTitle")}
+          </h3>
+          <p className="mt-3 text-ink-soft leading-relaxed">
+            {t("emailCaptureSub")}
+          </p>
+          <div className="mt-6">
+            <NewsletterForm source="landing-final" />
+          </div>
         </div>
       </section>
 
@@ -174,7 +190,18 @@ export default function LandingPage({
         <p className="text-xs text-ink-faded max-w-xl mx-auto leading-relaxed">
           {tDisclaimer("footer")}
         </p>
-        <p className="mt-4 text-sm font-display text-ink-soft">
+        <nav className="mt-5 flex items-center justify-center gap-5 text-sm text-ink-soft">
+          <Link href="/pricing" className="hover:text-ink">
+            {t("footerPricing")}
+          </Link>
+          <Link href="/terms" className="hover:text-ink">
+            {t("footerTerms")}
+          </Link>
+          <Link href="/privacy" className="hover:text-ink">
+            {t("footerPrivacy")}
+          </Link>
+        </nav>
+        <p className="mt-5 text-sm font-display text-ink-soft">
           {tBrand("name")} · {tBrand("nameZh")} © 2026
         </p>
       </footer>
@@ -198,10 +225,9 @@ function Header({
       <nav className="hidden md:flex items-center gap-6 text-sm text-ink-soft">
         <a href="#how" className="hover:text-ink">{tNav("features")}</a>
         <Link href="/pricing" className="hover:text-ink">{tNav("pricing")}</Link>
-        <Link href="/login" className="hover:text-ink">{tNav("login")}</Link>
       </nav>
       <Link
-        href="/register"
+        href="/onboarding"
         className="rounded-full bg-peach-deep text-white text-sm font-semibold px-5 py-2 hover:bg-peach-deep/90 transition"
       >
         {tNav("signup")}
