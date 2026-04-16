@@ -23,6 +23,10 @@ import {
 import { RDARing } from "@/components/pediatric/RDARing";
 import { DISCLAIMERS } from "@/lib/pediatric/disclaimers";
 import { ShareCardButton } from "@/components/share/ShareCardButton";
+import { useSubscriptionStore } from "@/stores/subscriptionStore";
+import { useUsageStore } from "@/stores/usageStore";
+import { limitsFor } from "@/lib/pricing/plans";
+import { PaywallModal } from "@/components/paywall/PaywallModal";
 
 /**
  * Plate scan page — Nibble's hero feature.
@@ -74,9 +78,20 @@ export default function ScanPage() {
   const activeChild = useChildProfileStore((s) => s.getActiveChild());
   const addMeal = useMealStore((s) => s.addMeal);
 
+  const loadSub = useSubscriptionStore((s) => s.loadFromStorage);
+  const currentPlan = useSubscriptionStore((s) => s.currentPlan);
+  const loadUsage = useUsageStore((s) => s.loadFromStorage);
+  const usageLoaded = useUsageStore((s) => s.loaded);
+  const recordUsage = useUsageStore((s) => s.record);
+  const todayScans = useUsageStore((s) => s.scan);
+
   useEffect(() => {
     loadChildren();
-  }, [loadChildren]);
+    loadSub();
+    loadUsage();
+  }, [loadChildren, loadSub, loadUsage]);
+
+  const [paywallOpen, setPaywallOpen] = useState(false);
 
   // Capture / preview state.
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -109,6 +124,22 @@ export default function ScanPage() {
 
   async function analyze() {
     if (!file || !activeChild) return;
+
+    // Enforce free-tier daily scan cap. We key by local date so a Taipei
+    // parent's "day" matches their clock, not UTC.
+    const plan = currentPlan();
+    const cap = limitsFor(plan).scansPerDay;
+    if (Number.isFinite(cap)) {
+      const d = new Date();
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const usedToday = todayScans[key] ?? 0;
+      if (usedToday >= cap) {
+        setPaywallOpen(true);
+        return;
+      }
+    }
+    recordUsage("scan");
+
     setAnalyzing(true);
     setError(null);
     setResult(null);
@@ -493,6 +524,21 @@ export default function ScanPage() {
           </div>
         </nav>
       )}
+
+      <PaywallModal
+        open={paywallOpen}
+        reason="scan"
+        usedToday={
+          usageLoaded
+            ? todayScans[
+                `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`
+              ] ?? 0
+            : 0
+        }
+        dailyCap={limitsFor(currentPlan()).scansPerDay}
+        locale={locale}
+        onClose={() => setPaywallOpen(false)}
+      />
     </main>
   );
 }
