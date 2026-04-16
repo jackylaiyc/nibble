@@ -57,6 +57,61 @@
     "save": "儲存",
     "cancel": "取消",
     "delete": "刪除",
-    "close": "關閉"
+    "close": "關閉",
+    "next": "下一步",
+    "back": "上一步",
+    "skip": "略過",
+    "done": "完成",
+    "optional": "（選填）"
+  },
+  "Onboarding": {
+    "progress": "第 {current} 步 / 共 {total} 步",
+    "welcome": "歡迎加入 Nibble 🍎",
+    "welcomeSub": "先跟我們說說寶貝的情況，我們會根據月齡推薦合適的營養目標。",
+
+    "step1Title": "寶貝叫什麼名字？",
+    "step1Sub": "不用全名，小名或暱稱就好。",
+    "nameLabel": "寶貝的名字",
+    "namePlaceholder": "例如：小豆、Coco",
+    "sexLabel": "生理性別",
+    "sexFemale": "女寶",
+    "sexMale": "男寶",
+    "sexUnspecified": "暫不填寫",
+    "sexHint": "用於 WHO 生長曲線比對；不影響其他功能。",
+    "avatarLabel": "選個頭像",
+
+    "step2Title": "寶貝幾歲了？",
+    "step2Sub": "我們用出生日期自動計算月齡，推薦對應的副食品與營養標準。",
+    "dobLabel": "出生日期",
+    "dobPreviewMonths": "現在約 {months} 個月",
+    "dobPreviewYears": "現在約 {years} 歲 {months} 個月",
+    "dobBucket": "月齡分組：{bucket}",
+    "dobUnsupported": "Nibble 目前服務 6 個月至 4 歲的寶貝，我們還是會幫你記錄，但部分功能可能不適用。",
+
+    "step3Title": "你們的餵養方式？",
+    "step3Sub": "沒有標準答案，可以之後隨時修改。",
+    "feedingBlw": "BLW（自主進食）",
+    "feedingBlwDesc": "讓寶寶自己抓握食物，鍛鍊咀嚼與手眼協調。",
+    "feedingPuree": "傳統泥狀",
+    "feedingPureeDesc": "餵食泥狀或滑順質地，逐步進階到碎狀。",
+    "feedingMixed": "混合（最常見）",
+    "feedingMixedDesc": "泥狀 + 手指食物一起，依寶寶當天狀態調整。",
+
+    "step4Title": "有已知的過敏原嗎？",
+    "step4Sub": "醫師確認過敏或疑似反應的食物；沒有的話直接略過。",
+    "knownAllergensLabel": "勾選已知過敏原",
+    "allergensNone": "目前沒有已知過敏原",
+    "allergensRegionalHint": "以下是常見於港/台/星的區域過敏原：",
+
+    "step5Title": "最後一步：家長確認",
+    "step5Sub": "Nibble 是教育工具，不是醫療服務。開始使用前請確認你了解這一點。",
+    "consentPrompt": "我確認：",
+    "consentItem1": "Nibble 提供的餵養建議僅供教育參考，不等於醫療建議。",
+    "consentItem2": "有任何健康疑慮，我會諮詢兒科醫師或專業醫療人員。",
+    "consentItem3": "我知道所有決定由我自己負責，Nibble 僅協助我整理資訊。",
+    "consentCheckbox": "我明白並同意以上聲明",
+
+    "finish": "開始使用 Nibble",
+    "saving": "建立中⋯⋯"
   }
 }

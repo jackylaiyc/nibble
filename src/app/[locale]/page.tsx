@@ -1,5 +1,7 @@
 import { useTranslations } from "next-intl";
+import { setRequestLocale } from "next-intl/server";
 import Link from "next/link";
+import { use } from "react";
 
 /**
  * Landing page — marketing, not app-shell.
@@ -8,7 +10,18 @@ import Link from "next/link";
  * above the fold reachable on a 360-width phone viewport.
  */
 
-export default function LandingPage() {
+export default function LandingPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  // Setting the request locale directly on the page (rather than relying
+  // only on the layout) is what next-intl v4 recommends — layout + page run
+  // concurrently as server components, so the page needs its own call for
+  // useTranslations to resolve to the URL locale, not defaultLocale.
+  const { locale } = use(params);
+  setRequestLocale(locale);
+
   const t = useTranslations("Landing");
   const tBrand = useTranslations("Brand");
   const tNav = useTranslations("Nav");

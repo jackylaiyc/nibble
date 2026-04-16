@@ -57,6 +57,61 @@
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
-    "close": "Close"
+    "close": "Close",
+    "next": "Next",
+    "back": "Back",
+    "skip": "Skip",
+    "done": "Done",
+    "optional": "(optional)"
+  },
+  "Onboarding": {
+    "progress": "Step {current} of {total}",
+    "welcome": "Welcome to Nibble 🍎",
+    "welcomeSub": "Tell us a bit about your baby so we can tailor nutrition targets by age.",
+
+    "step1Title": "What's your baby's name?",
+    "step1Sub": "A nickname is fine — no last name needed.",
+    "nameLabel": "Baby's name",
+    "namePlaceholder": "e.g. Coco, Beanie",
+    "sexLabel": "Biological sex",
+    "sexFemale": "Girl",
+    "sexMale": "Boy",
+    "sexUnspecified": "Prefer not to say",
+    "sexHint": "Used for WHO growth-curve plotting only.",
+    "avatarLabel": "Pick an avatar",
+
+    "step2Title": "How old is your baby?",
+    "step2Sub": "We calculate age from DOB and tailor nutrition guidance to the right bucket.",
+    "dobLabel": "Date of birth",
+    "dobPreviewMonths": "About {months} months old",
+    "dobPreviewYears": "About {years}y {months}m old",
+    "dobBucket": "Age bucket: {bucket}",
+    "dobUnsupported": "Nibble is tuned for ages 6 months to 4 years. We'll still log your baby's data, but some features may not apply.",
+
+    "step3Title": "How are you feeding right now?",
+    "step3Sub": "There's no wrong answer — you can change this anytime.",
+    "feedingBlw": "BLW (baby-led weaning)",
+    "feedingBlwDesc": "Offer foods baby picks up themselves to build chewing + coordination.",
+    "feedingPuree": "Purée",
+    "feedingPureeDesc": "Smooth, spoon-fed textures, gradually thickening up.",
+    "feedingMixed": "Mixed (most common)",
+    "feedingMixedDesc": "Some purée plus finger foods, day by day.",
+
+    "step4Title": "Any known allergens?",
+    "step4Sub": "Foods a pediatrician confirmed — or ones you suspect. Skip if none.",
+    "knownAllergensLabel": "Check any that apply",
+    "allergensNone": "No known allergens yet",
+    "allergensRegionalHint": "Common HK/TW/SG regional allergens:",
+
+    "step5Title": "One last thing — caregiver acknowledgment",
+    "step5Sub": "Nibble is an educational tool, not a medical service. Please confirm you understand before we start.",
+    "consentPrompt": "I confirm that:",
+    "consentItem1": "Nibble's feeding suggestions are for educational reference only, not medical advice.",
+    "consentItem2": "For any health concern I will consult a pediatrician or qualified provider.",
+    "consentItem3": "All decisions are mine — Nibble just helps me keep notes organized.",
+    "consentCheckbox": "I understand and agree with the above",
+
+    "finish": "Start using Nibble",
+    "saving": "Creating…"
   }
 }
