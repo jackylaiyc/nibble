@@ -191,12 +191,52 @@ async function identifyWithGemini(
   const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
   const cleaned = text.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
 
+  return parseGeminiJson(cleaned);
+}
+
+/**
+ * Gemini sometimes returns slightly malformed JSON (trailing commas, missing
+ * commas between array elements, truncated output). This parser tries
+ * progressively more aggressive cleanup before giving up.
+ */
+function parseGeminiJson(raw: string): GeminiPlateResponse {
+  // 1. Try direct parse
   try {
-    return JSON.parse(cleaned) as GeminiPlateResponse;
-  } catch {
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error("Failed to parse Gemini JSON");
-    return JSON.parse(match[0]) as GeminiPlateResponse;
+    return JSON.parse(raw) as GeminiPlateResponse;
+  } catch { /* fall through */ }
+
+  // 2. Extract the outermost {...} (skip any prose Gemini prepended/appended)
+  const objMatch = raw.match(/\{[\s\S]*\}/);
+  if (!objMatch) throw new Error("Failed to parse Gemini JSON: no object found");
+  let json = objMatch[0];
+
+  // 3. Fix common Gemini JSON quirks:
+  //    - trailing commas before ] or }
+  //    - missing commas between } and { in arrays (e.g. "}{" → "},{")
+  json = json
+    .replace(/,\s*([}\]])/g, "$1")          // trailing commas
+    .replace(/\}(\s*)\{/g, "},$1{")          // missing comma between objects
+    .replace(/\](\s*)\[/g, "],$1[");         // missing comma between arrays
+
+  try {
+    return JSON.parse(json) as GeminiPlateResponse;
+  } catch { /* fall through */ }
+
+  // 4. Last resort — if the JSON was truncated mid-array, try closing it
+  //    This handles responses cut off by maxOutputTokens.
+  const openBraces = (json.match(/\{/g) || []).length;
+  const closeBraces = (json.match(/\}/g) || []).length;
+  const openBrackets = (json.match(/\[/g) || []).length;
+  const closeBrackets = (json.match(/\]/g) || []).length;
+  let patched = json.replace(/,\s*$/, ""); // strip dangling comma
+  for (let i = 0; i < openBrackets - closeBrackets; i++) patched += "]";
+  for (let i = 0; i < openBraces - closeBraces; i++) patched += "}";
+
+  try {
+    return JSON.parse(patched) as GeminiPlateResponse;
+  } catch (err) {
+    console.error("[nutrition] All JSON parse attempts failed. Raw:", raw.slice(0, 500));
+    throw new Error("Failed to parse Gemini JSON after cleanup");
   }
 }
 
