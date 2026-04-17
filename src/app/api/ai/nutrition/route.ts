@@ -175,7 +175,9 @@ async function identifyWithGemini(
           // Deterministic output for identification/portion estimates.
           temperature: 0.2,
           maxOutputTokens: 4096,
-          responseMimeType: "application/json",
+          // NOTE: we intentionally omit responseMimeType: "application/json"
+          // because it can cause Gemini to return empty output for some images.
+          // Our parseGeminiJson() handles extracting JSON from prose/fenced output.
         },
       }),
     },
@@ -188,7 +190,22 @@ async function identifyWithGemini(
   }
 
   const data = await res.json();
-  const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+  // Log the raw response shape so we can debug empty/blocked responses.
+  const candidate = data.candidates?.[0];
+  if (!candidate?.content?.parts?.length) {
+    const reason = candidate?.finishReason ?? data.promptFeedback?.blockReason ?? "unknown";
+    console.error("[nutrition] Gemini returned no content. finishReason:", reason,
+      "promptFeedback:", JSON.stringify(data.promptFeedback ?? {}));
+    throw new Error(`Gemini returned empty response (reason: ${reason})`);
+  }
+
+  const text: string = candidate.content.parts[0]?.text ?? "";
+  if (!text.trim()) {
+    console.error("[nutrition] Gemini text is empty. Full candidate:", JSON.stringify(candidate).slice(0, 500));
+    throw new Error("Gemini returned empty text");
+  }
+
   const cleaned = text.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
 
   return parseGeminiJson(cleaned);
@@ -437,6 +454,10 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+
+  // Log image size for debugging — base64 is ~1.37× the raw bytes.
+  const imageSizeMB = (image.length * 0.75) / (1024 * 1024);
+  console.info(`[nutrition] image=${imageSizeMB.toFixed(1)}MB mime=${mimeType} bucket=${ageBucket}`);
 
   let gemini: GeminiPlateResponse;
   try {
