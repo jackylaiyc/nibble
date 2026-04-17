@@ -62,7 +62,7 @@ interface NutritionApiResponse {
 
 interface ApiErrorPayload {
   error: string;
-  code?: "NO_FOODS" | "FACE_DETECTED" | "BAD_INPUT" | "GEMINI_FAILED" | "PARSE_FAILED";
+  code?: "NO_FOODS" | "BAD_INPUT" | "GEMINI_FAILED" | "PARSE_FAILED" | "AI_NOT_CONFIGURED";
 }
 
 // ─── page ─────────────────────────────────────────────────────────────────
@@ -175,11 +175,9 @@ export default function ScanPage() {
         // went wrong" — that was the iPhone bug report.
         const detail = `${res.status}: ${payload.error ?? "unknown"}`;
         setError(
-          payload.code === "FACE_DETECTED"
-            ? t("faceDetectedError")
-            : payload.code === "NO_FOODS"
-              ? t("noFoodsError")
-              : t("genericError", { message: detail }),
+          payload.code === "NO_FOODS"
+            ? t("noFoodsError")
+            : t("genericError", { message: detail }),
         );
         return;
       }

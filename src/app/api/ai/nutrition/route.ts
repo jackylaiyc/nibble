@@ -55,7 +55,6 @@ interface GeminiPlateItem {
 }
 
 interface GeminiPlateResponse {
-  face_detected?: boolean;
   foods?: GeminiPlateItem[];
 }
 
@@ -89,7 +88,7 @@ interface ResponseFoodItem {
 
 interface ErrorPayload {
   error: string;
-  code?: "NO_FOODS" | "FACE_DETECTED" | "BAD_INPUT" | "GEMINI_FAILED" | "PARSE_FAILED" | "AI_NOT_CONFIGURED";
+  code?: "NO_FOODS" | "BAD_INPUT" | "GEMINI_FAILED" | "PARSE_FAILED" | "AI_NOT_CONFIGURED";
 }
 
 // ─── prompt construction ──────────────────────────────────────────────────
@@ -115,9 +114,9 @@ CHILD CONTEXT
 - ${AGE_BUCKET_GUIDANCE[ageBucket]}
 - Known allergens in caregiver profile: ${knownList}
 
-SAFETY — HARD RULES
-1. If the photo contains a visible human face (baby, parent, or anyone else), set "face_detected": true and return an empty foods array. Do not identify food. We reject face-containing photos.
-2. If the photo contains no food (e.g., just a toy, empty plate, text, screenshot), return "foods": [] with "face_detected": false.
+SAFETY
+1. If the photo contains no food (e.g., just a toy, empty plate, text, screenshot), return "foods": [].
+2. Ignore any people or faces in the photo — focus only on identifying food items.
 
 FOOD IDENTIFICATION
 For every distinct food item visible, return an object with:
@@ -133,7 +132,6 @@ For every distinct food item visible, return an object with:
 
 EXAMPLE (9-month-old plate with pumpkin puree + a strip of chicken):
 {
-  "face_detected": false,
   "foods": [
     {"name":"南瓜泥","name_en":"pumpkin puree","portion_amount":2,"portion_unit":"tbsp","portion_grams":30,"calories":12,"protein":0.4,"carbs":3,"fat":0.1,"fiber":0.5,"sugar":1.2,"sodium":0.001,"allergens_present":[],"iron_mg":0.2,"zinc_mg":0.1,"calcium_mg":5,"vitaminA_iu":1800,"vitaminC_mg":2.5},
     {"name":"雞肉條","name_en":"chicken strip","portion_amount":1,"portion_unit":"piece","portion_grams":15,"calories":25,"protein":4.5,"carbs":0,"fat":0.8,"fiber":0,"sugar":0,"sodium":0.015,"allergens_present":[],"iron_mg":0.15,"zinc_mg":0.3,"calcium_mg":2}
@@ -157,8 +155,10 @@ async function identifyWithGemini(
 
   const prompt = buildVisionPrompt(ageBucket, knownAllergens);
 
+  const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -183,7 +183,8 @@ async function identifyWithGemini(
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Gemini API error: ${err.slice(0, 400)}`);
+    console.error(`[nutrition] Gemini ${res.status} from model=${model}:`, err.slice(0, 500));
+    throw new Error(`Gemini API ${res.status}: ${err.slice(0, 400)}`);
   }
 
   const data = await res.json();
@@ -415,16 +416,6 @@ export async function POST(request: NextRequest) {
         code: isConfigIssue ? "AI_NOT_CONFIGURED" : "GEMINI_FAILED",
       },
       { status: isConfigIssue ? 503 : 502 },
-    );
-  }
-
-  if (gemini.face_detected) {
-    return NextResponse.json<ErrorPayload>(
-      {
-        error: "Photo contains a visible face. Please re-take with just the plate — we don't store images of children's faces.",
-        code: "FACE_DETECTED",
-      },
-      { status: 422 },
     );
   }
 

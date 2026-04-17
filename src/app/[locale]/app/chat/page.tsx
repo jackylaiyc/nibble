@@ -440,11 +440,6 @@ function MessageBubble({
           </Link>
         )}
 
-        {level === "educational" && message.disclaimerText && (
-          <p className="text-[11px] text-ink-faded italic leading-relaxed">
-            {message.disclaimerText}
-          </p>
-        )}
       </div>
     </div>
   );

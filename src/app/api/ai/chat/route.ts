@@ -122,10 +122,9 @@ When the caregiver clearly wants to record something, call the matching tool ins
 - "寶寶長了第一顆牙！" → log_milestone (celebrate!)
 
 ========================
-EVERY RESPONSE THAT TOUCHES HEALTH TOPICS
+NOTE
 ========================
-End with: "${locale === "en" ? DISCLAIMERS.aiResponse.en : DISCLAIMERS.aiResponse["zh-TW"]}"
-(The post-processor will add this automatically if you forget — but you should include it yourself for anything nutrition- or health-adjacent.)`;
+Do NOT add any disclaimer or footer to your responses. The app UI already shows a permanent disclaimer below the chat.`;
 }
 
 // ─── tool declarations ────────────────────────────────────────────────────
@@ -288,8 +287,10 @@ async function callGemini(
     },
   };
 
+  const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -298,7 +299,9 @@ async function callGemini(
   );
 
   if (!res.ok) {
-    throw new Error(`Gemini API error: ${(await res.text()).slice(0, 400)}`);
+    const err = await res.text();
+    console.error(`[chat] Gemini ${res.status} from model=${model}:`, err.slice(0, 500));
+    throw new Error(`Gemini API ${res.status}: ${err.slice(0, 400)}`);
   }
   return (await res.json()) as GeminiGenerateResponse;
 }
@@ -356,17 +359,10 @@ function shapeDisclaimer(
             : DISCLAIMERS.aiResponse["zh-TW"]
           : undefined;
 
-  // Append the disclaimer to the assistant text if Gemini didn't include one
-  // itself. Client renders it as a styled pill below the bubble either way —
-  // this is a belt-and-braces for plaintext consumption.
-  let outText = assistantText;
-  if (disclaimerText && !assistantText.includes(disclaimerText)) {
-    outText = assistantText
-      ? `${assistantText}\n\n${disclaimerText}`
-      : disclaimerText;
-  }
-
-  return { level, text: disclaimerText, outText };
+  // The client shows a static disclaimer below the chat composer, so we
+  // don't append per-message disclaimers. We still return the level so the
+  // client can show emergency/pediatrician banners when appropriate.
+  return { level, text: disclaimerText, outText: assistantText };
 }
 
 // ─── handler ──────────────────────────────────────────────────────────────
