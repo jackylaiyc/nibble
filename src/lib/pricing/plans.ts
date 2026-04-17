@@ -60,8 +60,8 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     price: null,
     limits: {
       children: 1,
-      scansPerDay: 3,
-      chatMessagesPerDay: 5,
+      scansPerDay: Infinity,
+      chatMessagesPerDay: Infinity,
       growthCurves: "basic",
       watermarkedShareCards: true,
       caregivers: 1,
