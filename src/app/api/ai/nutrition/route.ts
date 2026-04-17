@@ -52,6 +52,12 @@ interface GeminiPlateItem {
   vitaminA_iu?: number;
   vitaminC_mg?: number;
   dha_mg?: number;
+  /** Food insight fields — AI-generated, age-context-aware. */
+  benefit?: string;
+  benefit_en?: string;
+  risk?: string;
+  risk_en?: string;
+  suitability?: "excellent" | "good" | "caution" | "avoid";
 }
 
 interface GeminiPlateResponse {
@@ -84,6 +90,16 @@ interface ResponseFoodItem {
   nutrients: NutrientVector;
   allergensPresent: AllergenKey[];
   source: "local-db" | "usda" | "calorieninjas" | "gemini-estimate";
+  /** One-sentence benefit for this food at this age (zh-TW). */
+  benefit?: string;
+  /** One-sentence benefit (English). */
+  benefitEn?: string;
+  /** Risk or caution — empty string if none (zh-TW). */
+  risk?: string;
+  /** Risk or caution (English). */
+  riskEn?: string;
+  /** Overall suitability for this age bucket. */
+  suitability?: "excellent" | "good" | "caution" | "avoid";
 }
 
 interface ErrorPayload {
@@ -130,11 +146,19 @@ For every distinct food item visible, return an object with:
   ["milk","egg","peanut","treeNut","wheat","soy","fish","shellfish","sesame","shrimp","crab","buckwheat","celery"]
 - iron_mg, zinc_mg, calcium_mg, vitaminD_iu, vitaminA_iu, vitaminC_mg, dha_mg — your best guess in portion units (omit if unsure)
 
-EXAMPLE (9-month-old plate with pumpkin puree + a strip of chicken):
+FOOD INSIGHTS (important — parents want to understand WHY)
+For each food, also include:
+- benefit: 1 sentence in zh-TW explaining the key nutritional benefit for a child at age ${ageBucket}. Be specific and practical. Example: "南瓜富含維他命A，有助寶寶視力與免疫發育。"
+- benefit_en: same sentence in English. Example: "Pumpkin is rich in vitamin A, supporting vision and immune development."
+- risk: 1 sentence in zh-TW about any age-appropriate risk or caution. Use empty string "" if no risk. Examples: "蜂蜜不適合一歲以下寶寶" or "鈉含量偏高，建議少量" or ""
+- risk_en: same in English. Use empty string "" if no risk.
+- suitability: one of "excellent" | "good" | "caution" | "avoid" — how suitable is this food for age ${ageBucket}?
+
+EXAMPLE (9-month-old plate):
 {
   "foods": [
-    {"name":"南瓜泥","name_en":"pumpkin puree","portion_amount":2,"portion_unit":"tbsp","portion_grams":30,"calories":12,"protein":0.4,"carbs":3,"fat":0.1,"fiber":0.5,"sugar":1.2,"sodium":0.001,"allergens_present":[],"iron_mg":0.2,"zinc_mg":0.1,"calcium_mg":5,"vitaminA_iu":1800,"vitaminC_mg":2.5},
-    {"name":"雞肉條","name_en":"chicken strip","portion_amount":1,"portion_unit":"piece","portion_grams":15,"calories":25,"protein":4.5,"carbs":0,"fat":0.8,"fiber":0,"sugar":0,"sodium":0.015,"allergens_present":[],"iron_mg":0.15,"zinc_mg":0.3,"calcium_mg":2}
+    {"name":"南瓜泥","name_en":"pumpkin puree","portion_amount":2,"portion_unit":"tbsp","portion_grams":30,"calories":12,"protein":0.4,"carbs":3,"fat":0.1,"fiber":0.5,"sugar":1.2,"sodium":0.001,"allergens_present":[],"iron_mg":0.2,"zinc_mg":0.1,"calcium_mg":5,"vitaminA_iu":1800,"vitaminC_mg":2.5,"benefit":"南瓜富含維他命A與纖維，有助寶寶視力與消化發育。","benefit_en":"Pumpkin is rich in vitamin A and fiber, supporting vision and digestive development.","risk":"","risk_en":"","suitability":"excellent"},
+    {"name":"雞肉條","name_en":"chicken strip","portion_amount":1,"portion_unit":"piece","portion_grams":15,"calories":25,"protein":4.5,"carbs":0,"fat":0.8,"fiber":0,"sugar":0,"sodium":0.015,"allergens_present":[],"iron_mg":0.15,"zinc_mg":0.3,"calcium_mg":2,"benefit":"雞肉提供優質蛋白質與鋅，支持肌肉與免疫發育。","benefit_en":"Chicken provides quality protein and zinc for muscle and immune development.","risk":"確保切成適合寶寶抓握的條狀，避免噎住。","risk_en":"Ensure strips are sized for baby's grip to prevent choking.","suitability":"excellent"}
   ]
 }
 
@@ -251,7 +275,7 @@ function parseGeminiJson(raw: string): GeminiPlateResponse {
 
   try {
     return JSON.parse(patched) as GeminiPlateResponse;
-  } catch (err) {
+  } catch {
     console.error("[nutrition] All JSON parse attempts failed. Raw:", raw.slice(0, 500));
     throw new Error("Failed to parse Gemini JSON after cleanup");
   }
@@ -291,13 +315,15 @@ function scaleLocal(item: GeminiPlateItem): MicroLookup | null {
   };
 }
 
-async function lookupCalorieNinjas(query: string): Promise<MicroLookup | null> {
+async function lookupCalorieNinjas(query: string, portionGrams: number): Promise<MicroLookup | null> {
   const apiKey = process.env.CALORIE_NINJAS_API_KEY;
   if (!apiKey) return null;
 
   try {
+    // Include portion size in query — CalorieNinjas NLP handles "30g pumpkin"
+    const portionQuery = `${Math.round(portionGrams)}g ${query}`;
     const res = await fetch(
-      `https://api.calorieninjas.com/v1/nutrition?query=${encodeURIComponent(query)}`,
+      `https://api.calorieninjas.com/v1/nutrition?query=${encodeURIComponent(portionQuery)}`,
       { headers: { "X-Api-Key": apiKey } },
     );
     if (!res.ok) return null;
@@ -355,7 +381,14 @@ async function lookupUSDA(query: string, grams: number): Promise<MicroLookup | n
     for (const n of food.foodNutrients ?? []) {
       const key = USDA_NUTRIENT_MAP[n.nutrientName];
       if (key && typeof n.value === "number") {
-        nutrients[key] = Math.round(n.value * scale * 100) / 100;
+        let value = n.value * scale;
+        // USDA returns Vitamin A as mcg RAE and Vitamin D as mcg —
+        // our NutrientVector uses IU. Convert:
+        //   Vitamin A:  1 mcg RAE ≈ 3.33 IU
+        //   Vitamin D:  1 mcg = 40 IU
+        if (key === "vitaminA") value *= 3.33;
+        if (key === "vitaminD") value *= 40;
+        nutrients[key] = Math.round(value * 100) / 100;
       }
     }
     return { source: "usda", nutrients };
@@ -392,7 +425,7 @@ async function resolveNutrients(item: GeminiPlateItem): Promise<MicroLookup> {
   if (local) return local;
 
   // 2. CalorieNinjas — free, good NLP for English queries.
-  const cn = await lookupCalorieNinjas(item.name_en);
+  const cn = await lookupCalorieNinjas(item.name_en, item.portion_grams || 100);
   if (cn) return cn;
 
   // 3. USDA — best micronutrient depth for Western baby foods.
@@ -500,6 +533,11 @@ export async function POST(request: NextRequest) {
         nutrients: mergeNutrients(item, resolved),
         allergensPresent: item.allergens_present ?? [],
         source: resolved.source,
+        benefit: item.benefit ?? undefined,
+        benefitEn: item.benefit_en ?? undefined,
+        risk: item.risk || undefined,      // convert "" to undefined
+        riskEn: item.risk_en || undefined,
+        suitability: item.suitability ?? undefined,
       };
     }),
   );

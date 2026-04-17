@@ -18,6 +18,7 @@ import {
 } from "@/lib/pediatric/rdaTables";
 import {
   computeCoverage,
+  sumMeals,
   type NutrientTotals,
 } from "@/lib/pediatric/rdaGapAnalysis";
 import { RDARing } from "@/components/pediatric/RDARing";
@@ -56,6 +57,11 @@ interface NutritionApiResponse {
     nutrients: NutrientTotals;
     allergensPresent: AllergenKey[];
     source: FoodItem["source"];
+    benefit?: string;
+    benefitEn?: string;
+    risk?: string;
+    riskEn?: string;
+    suitability?: "excellent" | "good" | "caution" | "avoid";
   }>;
   totals: NutrientTotals;
 }
@@ -77,6 +83,8 @@ export default function ScanPage() {
   const childLoaded = useChildProfileStore((s) => s.loaded);
   const activeChild = useChildProfileStore((s) => s.getActiveChild());
   const addMeal = useMealStore((s) => s.addMeal);
+  const loadMeals = useMealStore((s) => s.loadFromStorage);
+  const getMealsForDate = useMealStore((s) => s.getMealsForDate);
 
   const loadSub = useSubscriptionStore((s) => s.loadFromStorage);
   const currentPlan = useSubscriptionStore((s) => s.currentPlan);
@@ -89,7 +97,8 @@ export default function ScanPage() {
     loadChildren();
     loadSub();
     loadUsage();
-  }, [loadChildren, loadSub, loadUsage]);
+    loadMeals();
+  }, [loadChildren, loadSub, loadUsage, loadMeals]);
 
   const [paywallOpen, setPaywallOpen] = useState(false);
 
@@ -135,22 +144,22 @@ export default function ScanPage() {
   }
 
   async function analyze() {
-    if (!file || !activeChild) return;
+    // Guard against double-clicks and missing prerequisites
+    if (!file || !activeChild || analyzing) return;
 
     // Enforce free-tier daily scan cap. We key by local date so a Taipei
     // parent's "day" matches their clock, not UTC.
     const plan = currentPlan();
-    const cap = limitsFor(plan).scansPerDay;
-    if (Number.isFinite(cap)) {
+    const capLimit = limitsFor(plan).scansPerDay;
+    if (Number.isFinite(capLimit)) {
       const d = new Date();
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       const usedToday = todayScans[key] ?? 0;
-      if (usedToday >= cap) {
+      if (usedToday >= capLimit) {
         setPaywallOpen(true);
         return;
       }
     }
-    recordUsage("scan");
 
     setAnalyzing(true);
     setError(null);
@@ -183,6 +192,8 @@ export default function ScanPage() {
       }
       const data = (await res.json()) as NutritionApiResponse;
       setResult(data);
+      // Record usage only AFTER a successful scan — never charge for failures
+      recordUsage("scan");
     } catch (err) {
       setError(
         t("genericError", {
@@ -206,12 +217,18 @@ export default function ScanPage() {
       ageBucketAtMeal: bucket,
       foods: result.foods.map((f) => ({
         name: f.name,
+        nameEn: f.nameEn,
         portionAmount: f.portionAmount,
         portionUnit: f.portionUnit,
         gramsEstimate: f.gramsEstimate,
         nutrients: f.nutrients,
         allergensPresent: f.allergensPresent,
         source: f.source,
+        benefit: f.benefit,
+        benefitEn: f.benefitEn,
+        risk: f.risk,
+        riskEn: f.riskEn,
+        suitability: f.suitability,
       })),
       totals: result.totals,
       date,
@@ -253,6 +270,27 @@ export default function ScanPage() {
     for (const cell of coverage) map[cell.nutrient] = cell;
     return map;
   }, [coverage]);
+
+  // Daily accumulated totals (previous meals today + this scan)
+  const dailyCoverage = useMemo(() => {
+    if (!result || !activeChild) return [];
+    const bucket = ageInfoFromDob(activeChild.dob).bucket;
+    const todayMeals = getMealsForDate(activeChild.id, new Date());
+    const previousTotals = todayMeals.map((m) => m.totals);
+    const combined = sumMeals([...previousTotals, result.totals]);
+    return computeCoverage(combined, bucket);
+  }, [result, activeChild, getMealsForDate]);
+
+  const dailyCoverageByNutrient = useMemo(() => {
+    const map: Partial<Record<Nutrient, (typeof dailyCoverage)[number]>> = {};
+    for (const cell of dailyCoverage) map[cell.nutrient] = cell;
+    return map;
+  }, [dailyCoverage]);
+
+  const todayMealCount = useMemo(() => {
+    if (!activeChild) return 0;
+    return getMealsForDate(activeChild.id, new Date()).length;
+  }, [activeChild, getMealsForDate]);
 
   // ─── render ─────────────────────────────────────────────────────────────
 
@@ -435,43 +473,83 @@ export default function ScanPage() {
               </div>
             )}
 
-            {/* Foods */}
+            {/* Foods with insights */}
             <div>
               <h2 className="font-display font-semibold text-ink mb-3">
                 {t("foodsTitle")}
               </h2>
-              <ul className="space-y-2">
+              <ul className="space-y-3">
                 {result.foods.map((food, i) => {
                   const unitLabel = t(
                     `unit_${food.portionUnit}` as "unit_tsp",
                   );
+                  const benefit = locale === "en" ? food.benefitEn : food.benefit;
+                  const risk = locale === "en" ? food.riskEn : food.risk;
+                  const suitability = food.suitability;
+                  const suitBadge = suitability === "excellent"
+                    ? { bg: "bg-sage/20", text: "text-sage-deep", label: locale === "en" ? "Excellent" : "非常適合" }
+                    : suitability === "good"
+                      ? { bg: "bg-butter/30", text: "text-ink", label: locale === "en" ? "Good" : "適合" }
+                      : suitability === "caution"
+                        ? { bg: "bg-peach/30", text: "text-peach-deep", label: locale === "en" ? "Caution" : "注意" }
+                        : suitability === "avoid"
+                          ? { bg: "bg-red-100", text: "text-red-700", label: locale === "en" ? "Avoid" : "避免" }
+                          : null;
                   return (
                     <li
                       key={`${food.nameEn}-${i}`}
-                      className="flex items-center gap-3 p-4 rounded-card bg-white border border-border"
+                      className="rounded-card bg-white border border-border overflow-hidden"
                     >
-                      <div className="size-10 rounded-2xl bg-butter/60 flex items-center justify-center text-lg">
-                        🍴
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-ink truncate">
-                          {food.name}
-                        </p>
-                        <p className="text-xs text-ink-faded">
-                          {t("portionLabel", {
-                            amount: food.portionAmount,
-                            unit: unitLabel,
-                            grams: Math.round(food.gramsEstimate),
-                          })}
-                        </p>
-                      </div>
-                      {food.allergensPresent.length > 0 && (
-                        <div className="flex items-center gap-0.5 text-base">
-                          {food.allergensPresent.slice(0, 3).map((k) => (
-                            <span key={k} title={getAllergen(k)?.label[locale]}>
-                              {getAllergen(k)?.emoji}
+                      {/* Food header row */}
+                      <div className="flex items-center gap-3 p-4">
+                        <div className="size-10 rounded-2xl bg-butter/60 flex items-center justify-center text-lg shrink-0">
+                          🍴
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-ink truncate">
+                            {food.name}
+                          </p>
+                          <p className="text-xs text-ink-faded">
+                            {t("portionLabel", {
+                              amount: food.portionAmount,
+                              unit: unitLabel,
+                              grams: Math.round(food.gramsEstimate),
+                            })}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {suitBadge && (
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${suitBadge.bg} ${suitBadge.text}`}>
+                              {suitBadge.label}
                             </span>
-                          ))}
+                          )}
+                          {food.allergensPresent.length > 0 && (
+                            <div className="flex items-center gap-0.5 text-base">
+                              {food.allergensPresent.slice(0, 3).map((k) => (
+                                <span key={k} title={getAllergen(k)?.label[locale]}>
+                                  {getAllergen(k)?.emoji}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Insights section */}
+                      {(benefit || risk) && (
+                        <div className="px-4 pb-4 space-y-1.5">
+                          {benefit && (
+                            <div className="flex items-start gap-2 text-sm">
+                              <span className="shrink-0 mt-0.5">💡</span>
+                              <p className="text-ink-faded leading-snug">{benefit}</p>
+                            </div>
+                          )}
+                          {risk && (
+                            <div className="flex items-start gap-2 text-sm">
+                              <span className="shrink-0 mt-0.5">⚠️</span>
+                              <p className="text-peach-deep leading-snug">{risk}</p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </li>
@@ -480,10 +558,47 @@ export default function ScanPage() {
               </ul>
             </div>
 
-            {/* RDA rings — priority + expandable full list */}
+            {/* Daily progress — accumulated across all meals today */}
+            {todayMealCount > 0 && (
+              <div>
+                <h2 className="font-display font-semibold text-ink mb-1">
+                  {locale === "en"
+                    ? `Today's total (${todayMealCount + 1} meals)`
+                    : `今日累計 (${todayMealCount + 1} 餐)`}
+                </h2>
+                <p className="text-xs text-ink-faded mb-4">
+                  {locale === "en"
+                    ? "Including previous meals today + this scan"
+                    : "包含今天之前的餐點 + 這次掃描"}
+                </p>
+                <div className="grid grid-cols-3 gap-3 rounded-bubble bg-sage/10 border border-sage/30 card-pop p-5">
+                  {priorityNutrients.map((nutrient) => {
+                    const cell = dailyCoverageByNutrient[nutrient];
+                    const target = RDA[bucket]?.[nutrient];
+                    if (!target) return null;
+                    return (
+                      <RDARing
+                        key={nutrient}
+                        nutrient={nutrient}
+                        coverage={cell?.coverage ?? 0}
+                        status={cell?.status ?? "unknown"}
+                        actual={cell?.actual ?? 0}
+                        unit={target.unit}
+                        locale={locale}
+                        size="sm"
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* This meal's nutrients — priority rings + expandable full list */}
             <div>
               <h2 className="font-display font-semibold text-ink mb-1">
-                {t("nutrientsTitle")}
+                {todayMealCount > 0
+                  ? (locale === "en" ? "This meal" : "本餐營養")
+                  : t("nutrientsTitle")}
               </h2>
               <p className="text-xs text-ink-faded mb-4">
                 {t("nutrientsHint")}
@@ -491,29 +606,16 @@ export default function ScanPage() {
               <div className="grid grid-cols-3 gap-3 rounded-bubble bg-white card-pop p-5">
                 {priorityNutrients.map((nutrient) => {
                   const cell = coverageByNutrient[nutrient];
-                  const target = RDA[bucket][nutrient];
-                  if (!cell) {
-                    return (
-                      <RDARing
-                        key={nutrient}
-                        nutrient={nutrient}
-                        coverage={0}
-                        status="unknown"
-                        actual={0}
-                        unit={target.unit}
-                        locale={locale}
-                        size="sm"
-                      />
-                    );
-                  }
+                  const target = RDA[bucket]?.[nutrient];
+                  if (!target) return null;
                   return (
                     <RDARing
                       key={nutrient}
                       nutrient={nutrient}
-                      coverage={cell.coverage}
-                      status={cell.status}
-                      actual={cell.actual}
-                      unit={cell.target.unit}
+                      coverage={cell?.coverage ?? 0}
+                      status={cell?.status ?? "unknown"}
+                      actual={cell?.actual ?? 0}
+                      unit={target.unit}
                       locale={locale}
                       size="sm"
                     />
@@ -521,9 +623,7 @@ export default function ScanPage() {
                 })}
               </div>
 
-              {/* Expandable: every other tracked nutrient as a slim bar row.
-                  Caregivers asked to see iron AND vitamin C AND fiber AND
-                  everything else, not just the age-bucket priority three. */}
+              {/* Expandable: every other tracked nutrient */}
               <button
                 type="button"
                 onClick={() => setShowAllNutrients((v) => !v)}
@@ -568,7 +668,6 @@ export default function ScanPage() {
                       priorityNutrients.slice(0, 4).map((n) => [
                         n,
                         NUTRIENT_LABELS[n][locale],
-                        // ScanCard expects 0-100; coverage is a 0-1 ratio.
                         Math.round((coverageByNutrient[n]?.coverage ?? 0) * 100),
                       ]),
                     ),

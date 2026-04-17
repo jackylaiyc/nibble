@@ -22,7 +22,7 @@ export type Nutrient =
   | "zinc"         // mg
   | "calcium"      // mg
   | "vitaminD"     // IU
-  | "vitaminA"     // mcg RAE
+  | "vitaminA"     // IU
   | "vitaminC"     // mg
   | "dha"          // mg
   | "sodium"       // mg (upper limit)
@@ -48,7 +48,7 @@ export const RDA: Record<AgeBucket, RdaRow> = {
     zinc: { value: 3, unit: "mg" },
     calcium: { value: 260, unit: "mg" },
     vitaminD: { value: 400, unit: "IU" },
-    vitaminA: { value: 500, unit: "mcg" },
+    vitaminA: { value: 1665, unit: "IU" },  // 500 mcg RAE × 3.33
     vitaminC: { value: 50, unit: "mg" },
     dha: { value: 100, unit: "mg" },
     sodium: { value: 370, unit: "mg", isUpperLimit: true },
@@ -64,7 +64,7 @@ export const RDA: Record<AgeBucket, RdaRow> = {
     zinc: { value: 3, unit: "mg" },
     calcium: { value: 260, unit: "mg" },
     vitaminD: { value: 400, unit: "IU" },
-    vitaminA: { value: 500, unit: "mcg" },
+    vitaminA: { value: 1665, unit: "IU" },  // 500 mcg RAE × 3.33
     vitaminC: { value: 50, unit: "mg" },
     dha: { value: 100, unit: "mg" },
     sodium: { value: 580, unit: "mg", isUpperLimit: true },
@@ -80,7 +80,7 @@ export const RDA: Record<AgeBucket, RdaRow> = {
     zinc: { value: 3, unit: "mg" },
     calcium: { value: 700, unit: "mg" },
     vitaminD: { value: 600, unit: "IU" },
-    vitaminA: { value: 300, unit: "mcg" },
+    vitaminA: { value: 1000, unit: "IU" },  // 300 mcg RAE × 3.33
     vitaminC: { value: 15, unit: "mg" },
     dha: { value: 150, unit: "mg" },
     sodium: { value: 800, unit: "mg", isUpperLimit: true },
@@ -96,7 +96,7 @@ export const RDA: Record<AgeBucket, RdaRow> = {
     zinc: { value: 3, unit: "mg" },
     calcium: { value: 700, unit: "mg" },
     vitaminD: { value: 600, unit: "IU" },
-    vitaminA: { value: 300, unit: "mcg" },
+    vitaminA: { value: 1000, unit: "IU" },  // 300 mcg RAE × 3.33
     vitaminC: { value: 15, unit: "mg" },
     dha: { value: 150, unit: "mg" },
     sodium: { value: 1200, unit: "mg", isUpperLimit: true },
@@ -112,7 +112,7 @@ export const RDA: Record<AgeBucket, RdaRow> = {
     zinc: { value: 5, unit: "mg" },
     calcium: { value: 1000, unit: "mg" },
     vitaminD: { value: 600, unit: "IU" },
-    vitaminA: { value: 400, unit: "mcg" },
+    vitaminA: { value: 1332, unit: "IU" },  // 400 mcg RAE × 3.33
     vitaminC: { value: 25, unit: "mg" },
     dha: { value: 200, unit: "mg" },
     sodium: { value: 1500, unit: "mg", isUpperLimit: true },

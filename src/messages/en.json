@@ -10,7 +10,10 @@
     "pricing": "Pricing",
     "login": "Log in",
     "signup": "Start free",
-    "dashboard": "My baby"
+    "dashboard": "My baby",
+    "scan": "Scan",
+    "history": "History",
+    "more": "More"
   },
   "Landing": {
     "heroTitle": "Snap the plate. Know if they got enough.",

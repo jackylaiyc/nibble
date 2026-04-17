@@ -147,32 +147,34 @@ function MealCard({
 
   return (
     <li className="rounded-bubble bg-white border border-border overflow-hidden card-pop flex flex-col">
-      <div className="relative aspect-[4/3] bg-cream/60">
-        {record.photoDataUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={record.photoDataUrl}
-            alt={record.foods.map((f) => f.name).join(", ")}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-ink-faded">
-            <span className="text-3xl mb-1">🍽️</span>
-            <span className="text-xs">{noPhotoLabel}</span>
+      <Link href={`/app/scan/${record.id}` as "/app/scan/history"} className="block">
+        <div className="relative aspect-[4/3] bg-cream/60">
+          {record.photoDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={record.photoDataUrl}
+              alt={record.foods.map((f) => f.name).join(", ")}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center text-ink-faded">
+              <span className="text-3xl mb-1">🍽️</span>
+              <span className="text-xs">{noPhotoLabel}</span>
+            </div>
+          )}
+          <div className="absolute top-2 right-2" onClick={(e) => e.preventDefault()}>
+            <button
+              type="button"
+              onClick={onDelete}
+              className="size-7 rounded-full bg-white/90 text-ink-faded hover:text-peach-deep flex items-center justify-center text-base leading-none backdrop-blur"
+              aria-label={deleteLabel}
+            >
+              ×
+            </button>
           </div>
-        )}
-        <div className="absolute top-2 right-2">
-          <button
-            type="button"
-            onClick={onDelete}
-            className="size-7 rounded-full bg-white/90 text-ink-faded hover:text-peach-deep flex items-center justify-center text-base leading-none backdrop-blur"
-            aria-label={deleteLabel}
-          >
-            ×
-          </button>
         </div>
-      </div>
-      <div className="p-4 flex-1 flex flex-col">
+      </Link>
+      <Link href={`/app/scan/${record.id}` as "/app/scan/history"} className="p-4 flex-1 flex flex-col">
         <p className="text-xs font-medium text-ink-faded tabular-nums">
           {formatTime(record.date, record.time, locale)}
         </p>
@@ -199,7 +201,7 @@ function MealCard({
             })}
           </div>
         )}
-      </div>
+      </Link>
     </li>
   );
 }

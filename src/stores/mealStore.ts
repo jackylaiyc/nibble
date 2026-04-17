@@ -8,6 +8,7 @@ export type PortionUnit = "tsp" | "tbsp" | "piece" | "ml" | "g";
 
 export interface FoodItem {
   name: string;
+  nameEn?: string;
   portionAmount: number;
   portionUnit: PortionUnit;
   gramsEstimate: number;
@@ -31,6 +32,16 @@ export interface FoodItem {
   allergensPresent?: AllergenKey[];
   /** Which data source provided the nutrients. */
   source?: "local-db" | "usda" | "calorieninjas" | "gemini-estimate";
+  /** One-sentence benefit for this food at the child's age (zh-TW). */
+  benefit?: string;
+  /** One-sentence benefit (English). */
+  benefitEn?: string;
+  /** Risk or caution if any (zh-TW). */
+  risk?: string;
+  /** Risk or caution (English). */
+  riskEn?: string;
+  /** Overall suitability for the child's age bucket. */
+  suitability?: "excellent" | "good" | "caution" | "avoid";
 }
 
 export interface MealRecord {

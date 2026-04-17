@@ -375,7 +375,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  if (!Array.isArray(body.messages) || body.messages.length === 0) {
+  if (
+    !Array.isArray(body.messages) ||
+    body.messages.length === 0 ||
+    body.messages.some(
+      (m) =>
+        typeof m.content !== "string" ||
+        !["user", "assistant"].includes(m.role),
+    )
+  ) {
     return NextResponse.json(
       { error: "messages must be a non-empty array of {role, content}" },
       { status: 400 },

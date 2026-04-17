@@ -10,7 +10,10 @@
     "pricing": "方案",
     "login": "登入",
     "signup": "免費試用",
-    "dashboard": "我的寶貝"
+    "dashboard": "我的寶貝",
+    "scan": "掃描",
+    "history": "紀錄",
+    "more": "更多"
   },
   "Landing": {
     "heroTitle": "拍張照，就知道寶貝今天吃夠了沒",

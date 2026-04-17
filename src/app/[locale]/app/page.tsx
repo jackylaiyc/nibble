@@ -1,261 +1,272 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useLocale } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
-import { AGE_BUCKET_LABELS, ageInfoFromDob } from "@/lib/pediatric/ageBucket";
-import { getAllergen } from "@/lib/pediatric/allergenRegistry";
+import { useMealStore } from "@/stores/mealStore";
+import { ageInfoFromDob } from "@/lib/pediatric/ageBucket";
+import {
+  PRIORITY_NUTRIENTS,
+  NUTRIENT_LABELS,
+  RDA,
+  type Nutrient,
+} from "@/lib/pediatric/rdaTables";
+import { computeCoverage, sumMeals } from "@/lib/pediatric/rdaGapAnalysis";
+import { RDARing } from "@/components/pediatric/RDARing";
 
 /**
- * Post-onboarding landing — minimal "hello Nibble" shell.
+ * Dashboard — Today's nutrition is the hero.
  *
- * Real tabs (Scan / Chat / Log / Growth) come in Day 5-7. For now we show
- * the active child's summary so the caregiver has confirmation their profile
- * was saved, plus Coming-Soon teasers for the main modules so the CTAs
- * already surface in the right spots.
+ * Layout: header → daily RDA rings → scan CTA → today's meals → quick links.
+ * Everything centres on "did baby eat enough today?"
  */
+
+const MEAL_LABELS: Record<string, { en: string; "zh-TW": string }> = {
+  breakfast: { en: "Breakfast", "zh-TW": "早餐" },
+  lunch: { en: "Lunch", "zh-TW": "午餐" },
+  dinner: { en: "Dinner", "zh-TW": "晚餐" },
+  snack: { en: "Snack", "zh-TW": "點心" },
+};
+
+const QUICK_LINKS = [
+  { emoji: "💬", href: "/app/chat" as const, en: "Ask Nibble", zh: "問 Nibble" },
+  { emoji: "💩", href: "/app/poop/log" as const, en: "Poop log", zh: "便便紀錄" },
+  { emoji: "📏", href: "/app/growth" as const, en: "Growth", zh: "生長紀錄" },
+  { emoji: "⭐", href: "/app/milestones" as const, en: "Milestones", zh: "里程碑" },
+];
 
 export default function AppDashboard() {
   const locale = useLocale() as "zh-TW" | "en";
   const router = useRouter();
-  const loadFromStorage = useChildProfileStore((s) => s.loadFromStorage);
-  const loaded = useChildProfileStore((s) => s.loaded);
+
+  const loadChildren = useChildProfileStore((s) => s.loadFromStorage);
+  const childLoaded = useChildProfileStore((s) => s.loaded);
   const activeChild = useChildProfileStore((s) => s.getActiveChild());
 
-  useEffect(() => {
-    loadFromStorage();
-  }, [loadFromStorage]);
+  const loadMeals = useMealStore((s) => s.loadFromStorage);
+  const getMealsForDate = useMealStore((s) => s.getMealsForDate);
 
-  // Once the store has hydrated, if there's no child the caregiver has
-  // skipped onboarding (or wiped storage) — redirect them there.
   useEffect(() => {
-    if (loaded && !activeChild) {
+    loadChildren();
+    loadMeals();
+  }, [loadChildren, loadMeals]);
+
+  useEffect(() => {
+    if (childLoaded && !activeChild) {
       router.replace("/onboarding");
     }
-  }, [loaded, activeChild, router]);
+  }, [childLoaded, activeChild, router]);
 
-  if (!loaded || !activeChild) {
+  // Today's meals
+  const todayMeals = useMemo(() => {
+    if (!activeChild) return [];
+    return getMealsForDate(activeChild.id, new Date());
+  }, [activeChild, getMealsForDate]);
+
+  // Daily nutrition progress
+  const { dailyCoverage, gapSummary } = useMemo(() => {
+    if (!activeChild || todayMeals.length === 0) {
+      return { dailyCoverage: [], gapSummary: null };
+    }
+    const bucket = ageInfoFromDob(activeChild.dob).bucket;
+    const totals = sumMeals(todayMeals.map((m) => m.totals));
+    const cov = computeCoverage(totals, bucket);
+
+    // Find the biggest gap in priority nutrients
+    const priority = PRIORITY_NUTRIENTS[bucket];
+    const gaps = cov
+      .filter((c) => priority.includes(c.nutrient) && !c.target.isUpperLimit && c.status === "below")
+      .sort((a, b) => a.coverage - b.coverage);
+    const worst = gaps[0];
+    const summary = worst
+      ? {
+          nutrient: NUTRIENT_LABELS[worst.nutrient][locale],
+          pct: Math.round((1 - worst.coverage) * 100),
+        }
+      : null;
+
+    return { dailyCoverage: cov, gapSummary: summary };
+  }, [activeChild, todayMeals, locale]);
+
+  const dailyCoverageByNutrient = useMemo(() => {
+    const map: Partial<Record<Nutrient, (typeof dailyCoverage)[number]>> = {};
+    for (const c of dailyCoverage) map[c.nutrient] = c;
+    return map;
+  }, [dailyCoverage]);
+
+  // Loading
+  if (!childLoaded) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <div className="text-ink-faded">
-          {locale === "en" ? "Loading…" : "載入中⋯⋯"}
-        </div>
+      <main className="min-h-screen flex items-center justify-center text-ink-faded">
+        Loading...
       </main>
     );
   }
 
+  if (!activeChild) return null; // redirect in effect
+
   const ageInfo = ageInfoFromDob(activeChild.dob);
-  const bucketLabel = AGE_BUCKET_LABELS[ageInfo.bucket][locale];
+  const bucket = ageInfo.bucket;
+  const priorityNutrients = PRIORITY_NUTRIENTS[bucket];
 
   return (
-    <main className="min-h-screen pb-20">
-      {/* Child card */}
-      <section className="px-6 pt-10 pb-8">
-        <div className="max-w-xl mx-auto rounded-bubble bg-white card-pop p-6">
-          <div className="flex items-center gap-4">
-            <div className="size-16 rounded-2xl bg-butter flex items-center justify-center text-4xl">
-              {activeChild.avatar || "🍎"}
-            </div>
-            <div>
-              <p className="font-display text-2xl font-bold text-ink">
-                {activeChild.name}
-              </p>
-              <p className="text-sm text-ink-soft">
-                {ageInfo.displayShort} · {bucketLabel}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-            <InfoCell
-              label={locale === "en" ? "Feeding style" : "餵養方式"}
-              value={
-                activeChild.feedingStyle === "blw"
-                  ? "BLW"
-                  : activeChild.feedingStyle === "puree"
-                    ? locale === "en"
-                      ? "Purée"
-                      : "泥狀"
-                    : locale === "en"
-                      ? "Mixed"
-                      : "混合"
-              }
-            />
-            <InfoCell
-              label={locale === "en" ? "Known allergens" : "已知過敏原"}
-              value={
-                activeChild.allergens.length === 0
-                  ? locale === "en"
-                    ? "None yet"
-                    : "尚未填寫"
-                  : activeChild.allergens
-                      .map((k) => getAllergen(k)?.label[locale] ?? k)
-                      .join(" · ")
-              }
-            />
+    <main className="min-h-screen bg-cream pb-28">
+      <div className="max-w-xl mx-auto px-5 pt-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <span className="text-3xl">{activeChild.avatar || "🍎"}</span>
+          <div>
+            <h1 className="font-display font-bold text-ink text-lg">
+              {activeChild.name}
+            </h1>
+            <p className="text-sm text-ink-faded">{ageInfo.displayShort}</p>
           </div>
         </div>
-      </section>
 
-      {/* Module list — Day 5-7 lit up the first six; chat comes Day 8+. */}
-      <section className="px-6">
-        <div className="max-w-xl mx-auto space-y-3">
-          <FeatureRow
-            href="/app/scan"
-            emoji="📸"
-            title={locale === "en" ? "Plate scan" : "餐盤分析"}
-            sub={
-              locale === "en"
-                ? "Snap a photo, see iron + zinc + calcium coverage"
-                : "拍照看鐵、鋅、鈣的覆蓋率"
-            }
-          />
-          <FeatureRow
-            href="/app/scan/history"
-            emoji="🥣"
-            title={locale === "en" ? "Meal history" : "餐點紀錄"}
-            sub={
-              locale === "en"
-                ? "Every plate you've scanned, with photos and nutrients"
-                : "歷次餐盤紀錄，含照片與營養素"
-            }
-          />
-          <FeatureRow
-            href="/app/chat"
-            emoji="💬"
-            title={locale === "en" ? "Ask Nibble" : "問 Nibble"}
-            sub={
-              locale === "en"
-                ? "Feeding, allergens, picky eaters — we've got you"
-                : "副食品、過敏、挑食問題都能問"
-            }
-          />
-          <FeatureRow
-            href="/app/poop/log"
-            emoji="💩"
-            title={locale === "en" ? "Poop log" : "便便紀錄"}
-            sub={
-              locale === "en"
-                ? "Bristol scale + color, flag red/white/black"
-                : "Bristol 量表 + 顏色，警示紅/白/黑"
-            }
-          />
-          <FeatureRow
-            href="/app/sleep"
-            emoji="😴"
-            title={locale === "en" ? "Sleep log" : "睡眠紀錄"}
-            sub={
-              locale === "en"
-                ? "Naps + nights with wake events and totals"
-                : "小睡 + 夜晚，含夜醒次數與總時數"
-            }
-          />
-          <FeatureRow
-            href="/app/milestones"
-            emoji="🎉"
-            title={locale === "en" ? "Milestones" : "里程碑"}
-            sub={
-              locale === "en"
-                ? "Preset checklist tuned to baby's age"
-                : "依月齡推薦的里程碑清單"
-            }
-          />
-          <FeatureRow
-            href="/app/reactions"
-            emoji="⚠️"
-            title={locale === "en" ? "Reaction log" : "過敏反應紀錄"}
-            sub={
-              locale === "en"
-                ? "Food, symptoms, severity — with a referral cue"
-                : "食物、症狀、嚴重度——附就醫提示"
-            }
-          />
-          <FeatureRow
-            href="/app/growth"
-            emoji="📈"
-            title={locale === "en" ? "Growth" : "生長曲線"}
-            sub={
-              locale === "en"
-                ? "Weight / height / head trend chart"
-                : "體重 / 身高 / 頭圍 趨勢圖"
-            }
-          />
-        </div>
-      </section>
+        {/* Today's Nutrition Progress (hero) */}
+        <section className="rounded-bubble bg-white card-pop p-5">
+          <h2 className="font-display font-semibold text-ink mb-1">
+            {locale === "en" ? "Today's nutrition" : "今日營養"}
+          </h2>
 
-      {/* Back-to-onboarding debug link (remove once auth is wired).
-          Truly resets local state so the label matches behavior — the link
-          previously just navigated to /onboarding, which left siblings and
-          scanned meals lurking in localStorage. */}
-      <div className="max-w-xl mx-auto px-6 mt-10 text-center">
-        <button
-          type="button"
-          onClick={() => {
-            if (typeof window === "undefined") return;
-            const confirmMsg =
-              locale === "en"
-                ? "This will erase all local data (children, meals, logs) and restart onboarding. Continue?"
-                : "這會清除所有本機資料（小孩、餐點、紀錄）並重新開始引導流程，確定？";
-            if (!window.confirm(confirmMsg)) return;
-            for (let i = localStorage.length - 1; i >= 0; i--) {
-              const key = localStorage.key(i);
-              if (key && key.startsWith("nibble_")) localStorage.removeItem(key);
-            }
-            router.replace("/onboarding");
-          }}
-          className="text-xs text-ink-faded underline"
+          {todayMeals.length === 0 ? (
+            <div className="text-center py-6">
+              <div className="text-4xl mb-3">🍽️</div>
+              <p className="text-ink-faded text-sm mb-1">
+                {locale === "en"
+                  ? "No meals logged yet today."
+                  : "今天還沒有紀錄。"}
+              </p>
+              <p className="text-ink-faded text-xs">
+                {locale === "en"
+                  ? "Scan your baby's plate to start tracking!"
+                  : "拍張照開始追蹤寶貝的營養！"}
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-ink-faded mb-4">
+                {locale === "en"
+                  ? `${todayMeals.length} meal${todayMeals.length > 1 ? "s" : ""} logged`
+                  : `已記錄 ${todayMeals.length} 餐`}
+              </p>
+              <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+                {priorityNutrients.map((nutrient) => {
+                  const cell = dailyCoverageByNutrient[nutrient];
+                  const target = RDA[bucket]?.[nutrient];
+                  if (!target) return null;
+                  return (
+                    <div key={nutrient} className="shrink-0">
+                      <RDARing
+                        nutrient={nutrient}
+                        coverage={cell?.coverage ?? 0}
+                        status={cell?.status ?? "unknown"}
+                        actual={cell?.actual ?? 0}
+                        unit={target.unit}
+                        locale={locale}
+                        size="md"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              {gapSummary ? (
+                <p className="text-sm text-peach-deep mt-3 font-medium">
+                  {locale === "en"
+                    ? `${gapSummary.nutrient} needs ${gapSummary.pct}% more`
+                    : `${gapSummary.nutrient}還需要 ${gapSummary.pct}%`}
+                </p>
+              ) : (
+                <p className="text-sm text-sage-deep mt-3 font-medium">
+                  {locale === "en" ? "All on track today!" : "今日營養都達標！"}
+                </p>
+              )}
+            </>
+          )}
+        </section>
+
+        {/* Scan CTA */}
+        <Link
+          href="/app/scan"
+          className="flex items-center justify-center gap-2 w-full py-4 rounded-full bg-peach-deep text-white font-semibold text-lg bubble-shadow hover:bg-peach-deep/90 transition"
         >
-          {locale === "en" ? "Start over (debug)" : "重新開始（偵錯）"}
-        </button>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+          {locale === "en" ? "Scan a plate" : "拍下餐盤"}
+        </Link>
+
+        {/* Today's meals strip */}
+        {todayMeals.length > 0 && (
+          <section>
+            <div className="flex items-baseline justify-between mb-3">
+              <h2 className="font-display font-semibold text-ink">
+                {locale === "en" ? "Today's meals" : "今日餐點"}
+              </h2>
+              <Link
+                href="/app/scan/history"
+                className="text-xs text-peach-deep font-medium"
+              >
+                {locale === "en" ? "View all" : "查看全部"} →
+              </Link>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+              {todayMeals.map((meal) => {
+                const ml = MEAL_LABELS[meal.mealType];
+                return (
+                  <Link
+                    key={meal.id}
+                    href={`/app/scan/${meal.id}` as "/app/scan/history"}
+                    className="shrink-0 w-28 rounded-card bg-white border border-border overflow-hidden hover:border-peach/50 transition"
+                  >
+                    {meal.photoDataUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={meal.photoDataUrl}
+                        alt=""
+                        className="w-full h-20 object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-20 bg-butter/30 flex items-center justify-center text-2xl">
+                        🍽️
+                      </div>
+                    )}
+                    <div className="p-2">
+                      <p className="text-xs font-medium text-ink truncate">
+                        {ml?.[locale] ?? meal.mealType}
+                      </p>
+                      <p className="text-[10px] text-ink-faded">{meal.time}</p>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Quick links */}
+        <section>
+          <h2 className="font-display font-semibold text-ink mb-3">
+            {locale === "en" ? "Quick links" : "快速功能"}
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
+            {QUICK_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="flex items-center gap-3 p-4 rounded-card bg-white border border-border hover:border-peach/40 transition"
+              >
+                <span className="text-xl">{link.emoji}</span>
+                <span className="text-sm font-medium text-ink">
+                  {locale === "en" ? link.en : link.zh}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
       </div>
     </main>
   );
 }
-
-function InfoCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-card bg-cream border border-border p-3">
-      <p className="text-xs text-ink-faded mb-1">{label}</p>
-      <p className="font-medium text-ink">{value}</p>
-    </div>
-  );
-}
-
-function FeatureRow({
-  href,
-  emoji,
-  title,
-  sub,
-}: {
-  href:
-    | "/app/scan"
-    | "/app/scan/history"
-    | "/app/chat"
-    | "/app/poop/log"
-    | "/app/poop/history"
-    | "/app/sleep"
-    | "/app/milestones"
-    | "/app/reactions"
-    | "/app/growth";
-  emoji: string;
-  title: string;
-  sub: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex items-center gap-4 p-5 rounded-card bg-white border border-border hover:border-peach-deep hover:bg-peach/10 transition"
-    >
-      <div className="size-12 rounded-2xl bg-sage/30 flex items-center justify-center text-2xl">
-        {emoji}
-      </div>
-      <div className="flex-1">
-        <p className="font-display font-semibold text-ink">{title}</p>
-        <p className="mt-0.5 text-sm text-ink-soft">{sub}</p>
-      </div>
-      <span className="text-ink-soft text-lg">→</span>
-    </Link>
-  );
-}
-
