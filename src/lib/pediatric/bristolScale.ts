@@ -125,7 +125,7 @@ export const POOP_COLORS: Record<PoopColor, {
     redFlag: true,
   },
   white: {
-    label: { en: "White/pale", "zh-TW": "白色/淺色" },
+    label: { en: "White", "zh-TW": "白色" },
     swatch: "#EFE7D6",
     redFlag: true,
   },

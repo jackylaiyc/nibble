@@ -150,7 +150,10 @@ function PoopLogPageInner() {
   }
 
   return (
-    <main className="min-h-screen pb-36">
+    <main
+      className="min-h-screen"
+      style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 200px)" }}
+    >
       {/* Header */}
       <header className="sticky top-0 z-20 bg-cream/90 backdrop-blur-md border-b border-border px-6 py-4">
         <div className="max-w-xl mx-auto flex items-center gap-3">
@@ -306,8 +309,11 @@ function PoopLogPageInner() {
         </p>
       </div>
 
-      {/* Sticky save */}
-      <nav className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-border px-6 py-4">
+      {/* Sticky save — sits above the persistent BottomNav (~74px + safe area) */}
+      <nav
+        className="fixed inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-border px-6 py-4"
+        style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 80px)" }}
+      >
         <div className="max-w-xl mx-auto">
           <button
             onClick={save}
