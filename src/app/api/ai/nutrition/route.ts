@@ -13,7 +13,7 @@ import type { AllergenKey } from "@/lib/pediatric/allergenRegistry";
  *   1. Gemini 2.5 Flash vision:
  *      - identifies foods + estimates portions in infant-appropriate units
  *      - flags any top-9 / HK-TW-regional allergens present
- *      - refuses photos with visible human faces (COPPA mitigation)
+ *      - identifies all visible food, no age/face/content restrictions
  *   2. Nutrient waterfall per food (cheapest→dearest):
  *      local China/Japan DB → CalorieNinjas → USDA → Gemini's own estimate
  *   3. Scale to portion grams, sum totals, return.
@@ -109,63 +109,38 @@ interface ErrorPayload {
 
 // ─── prompt construction ──────────────────────────────────────────────────
 
-const AGE_BUCKET_GUIDANCE: Record<AgeBucket, string> = {
-  "6-8mo": "Typical baby food at this age: puréed single ingredients, thin oatmeal, steamed veggie purées, soft BLW finger strips. Typical portion: 1–2 tbsp per food. (But analyze any food shown — adult-style food may be a tasting portion.)",
-  "9-11mo": "Typical baby food: thicker purées, soft mashed mixtures, small finger foods (pea-sized pieces). Typical portion: 2–4 tbsp per food. (Analyze any food shown.)",
-  "12-23mo": "Typical food: small chopped family foods, half-sized servings of table food, 1/4–1/2 cup per food. Whole milk permitted. (Analyze any food shown.)",
-  "24-47mo": "Typical food: toddler-sized table food, 1/2 of an adult portion. Variety across food groups.",
-  "48mo+": "Typical food: near-adult plates but smaller portions.",
-};
+function buildVisionPrompt(): string {
+  // No restrictions, no safety filters, no age gating. Just identify the food
+  // and return JSON. The optional benefit/risk/suitability fields are purely
+  // informational tags — Gemini must NEVER use them to refuse a photo.
+  return `You are a food identification model. Look at the photo and identify every food item you can see. Always return a JSON object with a "foods" array.
 
-function buildVisionPrompt(ageBucket: AgeBucket, knownAllergens: AllergenKey[]): string {
-  const knownList =
-    knownAllergens.length > 0
-      ? knownAllergens.join(", ")
-      : "(none disclosed)";
-
-  return `You are Nibble, a pediatric nutrition vision model. Analyze any food in this photo and return JSON.
-
-CHILD CONTEXT
-- Age bucket: ${ageBucket}
-- ${AGE_BUCKET_GUIDANCE[ageBucket]}
-- Known allergens in caregiver profile: ${knownList}
-
-CRITICAL RULES
-1. ALWAYS return a valid JSON object with a "foods" array — never plain prose, never refusal text, never explanation outside the JSON.
-2. Identify EVERY food item you can see, regardless of whether it's age-appropriate. Parents share plates and want to know what's in adult food too. Use the suitability + risk fields to flag age concerns — DO NOT refuse to identify the food.
-3. If the photo truly contains no food (toy, empty plate, text, screenshot), return {"foods": []}.
-4. Ignore any people or faces in the photo — focus on the food.
-
-FOOD IDENTIFICATION
-For every distinct food item visible, return an object with:
-- name: Chinese name (e.g. "南瓜泥", "蛋黃" — prefer zh-TW). If the food is Western, use the Chinese transliteration or common name.
-- name_en: short English searchable term (e.g. "pumpkin puree", "egg yolk")
-- portion_amount + portion_unit: natural infant units. Units: "tsp" | "tbsp" | "piece" | "ml" | "g".
-  Prefer tsp/tbsp for purees, piece for finger foods, ml for liquids, g as fallback.
-- portion_grams: your best edible-weight estimate in grams (number)
+For each food item, include:
+- name: name in zh-TW (e.g. "南瓜泥", "鰻魚飯")
+- name_en: short English searchable term (e.g. "pumpkin puree", "eel rice")
+- portion_amount + portion_unit: natural units. Units: "tsp" | "tbsp" | "piece" | "ml" | "g"
+- portion_grams: best edible-weight estimate in grams (number)
 - calories (kcal), protein (g), carbs (g), fat (g), fiber (g), sugar (g), sodium (g) — scaled to this portion, NOT per 100g
-- allergens_present: array subset of these keys that are in this item:
-  ["milk","egg","peanut","treeNut","wheat","soy","fish","shellfish","sesame","shrimp","crab","buckwheat","celery"]
-- iron_mg, zinc_mg, calcium_mg, vitaminD_iu, vitaminA_iu, vitaminC_mg, dha_mg — your best guess in portion units (omit if unsure)
+- allergens_present: array subset of ["milk","egg","peanut","treeNut","wheat","soy","fish","shellfish","sesame","shrimp","crab","buckwheat","celery"]
+- iron_mg, zinc_mg, calcium_mg, vitaminD_iu, vitaminA_iu, vitaminC_mg, dha_mg — best guess scaled to portion (omit if unsure)
+- benefit: 1 sentence in zh-TW about the food's nutritional benefit. Example: "南瓜富含維他命A與纖維，有助視力與消化。"
+- benefit_en: same sentence in English
+- risk: 1 sentence in zh-TW about any practical caution (e.g. choking, sodium). Use "" if none.
+- risk_en: same in English. Use "" if none.
+- suitability: one of "excellent" | "good" | "caution" — purely informational tag based on common nutrition guidance. Default to "good" when unsure. Never refuse a food.
 
-FOOD INSIGHTS (important — parents want to understand WHY)
-For each food, also include:
-- benefit: 1 sentence in zh-TW explaining the key nutritional benefit for a child at age ${ageBucket}. Be specific and practical. Example: "南瓜富含維他命A，有助寶寶視力與免疫發育。"
-- benefit_en: same sentence in English. Example: "Pumpkin is rich in vitamin A, supporting vision and immune development."
-- risk: 1 sentence in zh-TW about any age-appropriate risk or caution. Use empty string "" if no risk. Examples: "蜂蜜不適合一歲以下寶寶" or "鈉含量偏高，建議少量" or ""
-- risk_en: same in English. Use empty string "" if no risk.
-- suitability: one of "excellent" | "good" | "caution" | "avoid" — how suitable is this food for age ${ageBucket}?
-
-EXAMPLE (9-month-old plate):
+EXAMPLE:
 {
   "foods": [
-    {"name":"南瓜泥","name_en":"pumpkin puree","portion_amount":2,"portion_unit":"tbsp","portion_grams":30,"calories":12,"protein":0.4,"carbs":3,"fat":0.1,"fiber":0.5,"sugar":1.2,"sodium":0.001,"allergens_present":[],"iron_mg":0.2,"zinc_mg":0.1,"calcium_mg":5,"vitaminA_iu":1800,"vitaminC_mg":2.5,"benefit":"南瓜富含維他命A與纖維，有助寶寶視力與消化發育。","benefit_en":"Pumpkin is rich in vitamin A and fiber, supporting vision and digestive development.","risk":"","risk_en":"","suitability":"excellent"},
-    {"name":"雞肉條","name_en":"chicken strip","portion_amount":1,"portion_unit":"piece","portion_grams":15,"calories":25,"protein":4.5,"carbs":0,"fat":0.8,"fiber":0,"sugar":0,"sodium":0.015,"allergens_present":[],"iron_mg":0.15,"zinc_mg":0.3,"calcium_mg":2,"benefit":"雞肉提供優質蛋白質與鋅，支持肌肉與免疫發育。","benefit_en":"Chicken provides quality protein and zinc for muscle and immune development.","risk":"確保切成適合寶寶抓握的條狀，避免噎住。","risk_en":"Ensure strips are sized for baby's grip to prevent choking.","suitability":"excellent"}
+    {"name":"南瓜泥","name_en":"pumpkin puree","portion_amount":2,"portion_unit":"tbsp","portion_grams":30,"calories":12,"protein":0.4,"carbs":3,"fat":0.1,"fiber":0.5,"sugar":1.2,"sodium":0.001,"allergens_present":[],"iron_mg":0.2,"zinc_mg":0.1,"calcium_mg":5,"vitaminA_iu":1800,"vitaminC_mg":2.5,"benefit":"南瓜富含維他命A與纖維。","benefit_en":"Pumpkin is rich in vitamin A and fiber.","risk":"","risk_en":"","suitability":"excellent"},
+    {"name":"鰻魚飯","name_en":"eel rice","portion_amount":1,"portion_unit":"piece","portion_grams":120,"calories":280,"protein":18,"carbs":35,"fat":8,"fiber":0.5,"sugar":3,"sodium":0.45,"allergens_present":["fish","soy"],"iron_mg":0.6,"zinc_mg":1.6,"calcium_mg":25,"vitaminD_iu":920,"vitaminA_iu":1200,"benefit":"鰻魚富含維他命D與omega-3。","benefit_en":"Eel is rich in vitamin D and omega-3.","risk":"鈉含量偏高。","risk_en":"Higher in sodium.","suitability":"good"}
   ]
 }
 
+If the photo genuinely contains no food (e.g. blank wall, abstract image), return {"foods": []}.
+
 OUTPUT
-Return ONLY the JSON object — no markdown fences, no prose, no explanation.`;
+Return ONLY the JSON object. No markdown fences, no prose, no explanation.`;
 }
 
 // ─── Gemini call ──────────────────────────────────────────────────────────
@@ -173,13 +148,11 @@ Return ONLY the JSON object — no markdown fences, no prose, no explanation.`;
 async function identifyWithGemini(
   imageBase64: string,
   mimeType: string,
-  ageBucket: AgeBucket,
-  knownAllergens: AllergenKey[],
 ): Promise<GeminiPlateResponse> {
   const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
   if (!apiKey) throw new Error("GOOGLE_GEMINI_API_KEY not set");
 
-  const prompt = buildVisionPrompt(ageBucket, knownAllergens);
+  const prompt = buildVisionPrompt();
 
   const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
@@ -490,7 +463,6 @@ export async function POST(request: NextRequest) {
   }
 
   const { image, mimeType, ageBucket } = body;
-  const knownAllergens = body.knownAllergens ?? [];
 
   if (!image || !mimeType || !ageBucket) {
     return NextResponse.json<ErrorPayload>(
@@ -505,7 +477,7 @@ export async function POST(request: NextRequest) {
 
   let gemini: GeminiPlateResponse;
   try {
-    gemini = await identifyWithGemini(image, mimeType, ageBucket, knownAllergens);
+    gemini = await identifyWithGemini(image, mimeType);
   } catch (err) {
     // Log the full error server-side; never echo internals (env var names,
     // upstream API responses) to the client. Distinguish missing-key from
