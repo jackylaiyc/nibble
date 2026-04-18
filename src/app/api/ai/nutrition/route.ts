@@ -110,11 +110,11 @@ interface ErrorPayload {
 // ─── prompt construction ──────────────────────────────────────────────────
 
 const AGE_BUCKET_GUIDANCE: Record<AgeBucket, string> = {
-  "6-8mo": "Expect puréed single-ingredient foods, thin oatmeal, steamed veggie purées, tiny portions (1–2 tbsp). Parents often use BLW (soft finger strips).",
-  "9-11mo": "Expect thicker purées, soft mashed mixtures, small finger foods (pea-sized pieces), 2–4 tbsp per food. Still no added salt/sugar.",
-  "12-23mo": "Expect small chopped family foods, half-sized servings of table food, 1/4–1/2 cup per food. Whole milk permitted.",
-  "24-47mo": "Expect toddler-sized table food, 1/2 of an adult portion. Variety across food groups.",
-  "48mo+": "Expect near-adult plates but smaller portions.",
+  "6-8mo": "Typical baby food at this age: puréed single ingredients, thin oatmeal, steamed veggie purées, soft BLW finger strips. Typical portion: 1–2 tbsp per food. (But analyze any food shown — adult-style food may be a tasting portion.)",
+  "9-11mo": "Typical baby food: thicker purées, soft mashed mixtures, small finger foods (pea-sized pieces). Typical portion: 2–4 tbsp per food. (Analyze any food shown.)",
+  "12-23mo": "Typical food: small chopped family foods, half-sized servings of table food, 1/4–1/2 cup per food. Whole milk permitted. (Analyze any food shown.)",
+  "24-47mo": "Typical food: toddler-sized table food, 1/2 of an adult portion. Variety across food groups.",
+  "48mo+": "Typical food: near-adult plates but smaller portions.",
 };
 
 function buildVisionPrompt(ageBucket: AgeBucket, knownAllergens: AllergenKey[]): string {
@@ -123,16 +123,18 @@ function buildVisionPrompt(ageBucket: AgeBucket, knownAllergens: AllergenKey[]):
       ? knownAllergens.join(", ")
       : "(none disclosed)";
 
-  return `You are Nibble, a pediatric nutrition vision model. Analyze this baby/toddler plate photo.
+  return `You are Nibble, a pediatric nutrition vision model. Analyze any food in this photo and return JSON.
 
 CHILD CONTEXT
 - Age bucket: ${ageBucket}
 - ${AGE_BUCKET_GUIDANCE[ageBucket]}
 - Known allergens in caregiver profile: ${knownList}
 
-SAFETY
-1. If the photo contains no food (e.g., just a toy, empty plate, text, screenshot), return "foods": [].
-2. Ignore any people or faces in the photo — focus only on identifying food items.
+CRITICAL RULES
+1. ALWAYS return a valid JSON object with a "foods" array — never plain prose, never refusal text, never explanation outside the JSON.
+2. Identify EVERY food item you can see, regardless of whether it's age-appropriate. Parents share plates and want to know what's in adult food too. Use the suitability + risk fields to flag age concerns — DO NOT refuse to identify the food.
+3. If the photo truly contains no food (toy, empty plate, text, screenshot), return {"foods": []}.
+4. Ignore any people or faces in the photo — focus on the food.
 
 FOOD IDENTIFICATION
 For every distinct food item visible, return an object with:
@@ -221,13 +223,14 @@ async function identifyWithGemini(
     const reason = candidate?.finishReason ?? data.promptFeedback?.blockReason ?? "unknown";
     console.error("[nutrition] Gemini returned no content. finishReason:", reason,
       "promptFeedback:", JSON.stringify(data.promptFeedback ?? {}));
-    throw new Error(`Gemini returned empty response (reason: ${reason})`);
+    // Empty response → treat as "no foods detected", not a 502 server error.
+    return { foods: [] };
   }
 
   const text: string = candidate.content.parts[0]?.text ?? "";
   if (!text.trim()) {
     console.error("[nutrition] Gemini text is empty. Full candidate:", JSON.stringify(candidate).slice(0, 500));
-    throw new Error("Gemini returned empty text");
+    return { foods: [] };
   }
 
   const cleaned = text.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
@@ -237,8 +240,9 @@ async function identifyWithGemini(
 
 /**
  * Gemini sometimes returns slightly malformed JSON (trailing commas, missing
- * commas between array elements, truncated output). This parser tries
- * progressively more aggressive cleanup before giving up.
+ * commas between array elements, truncated output) — or pure prose when it
+ * decides the photo isn't analysable. This parser tries progressively more
+ * aggressive cleanup, then falls back to "no foods" rather than crashing.
  */
 function parseGeminiJson(raw: string): GeminiPlateResponse {
   // 1. Try direct parse
@@ -248,7 +252,12 @@ function parseGeminiJson(raw: string): GeminiPlateResponse {
 
   // 2. Extract the outermost {...} (skip any prose Gemini prepended/appended)
   const objMatch = raw.match(/\{[\s\S]*\}/);
-  if (!objMatch) throw new Error("Failed to parse Gemini JSON: no object found");
+  if (!objMatch) {
+    // No JSON object at all — Gemini returned pure prose (often a refusal).
+    // Surface as "no foods" so the UI shows a friendly retry hint, not 502.
+    console.error("[nutrition] Gemini returned non-JSON. Raw:", raw.slice(0, 500));
+    return { foods: [] };
+  }
   let json = objMatch[0];
 
   // 3. Fix common Gemini JSON quirks:
@@ -277,7 +286,9 @@ function parseGeminiJson(raw: string): GeminiPlateResponse {
     return JSON.parse(patched) as GeminiPlateResponse;
   } catch {
     console.error("[nutrition] All JSON parse attempts failed. Raw:", raw.slice(0, 500));
-    throw new Error("Failed to parse Gemini JSON after cleanup");
+    // Surface as "no foods" rather than 502 — the photo arrived fine, Gemini
+    // just gave us something unparseable.
+    return { foods: [] };
   }
 }
 

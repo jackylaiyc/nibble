@@ -198,14 +198,28 @@ export default function ScanPage() {
     setError(null);
     setResult(null);
     try {
-      const imageBase64 = await fileToBase64(file);
+      // Prefer the compressed data URL (800px, 70% JPEG) so we ship a small
+      // payload to Gemini — phone originals are 4–8 MB, which slows uploads
+      // and makes Gemini more likely to truncate output. Fall back to the
+      // raw file if compression hasn't completed yet.
+      let imageBase64: string;
+      let mimeType: string;
+      if (photoDataUrl) {
+        // photoDataUrl is "data:image/jpeg;base64,...."
+        const commaIdx = photoDataUrl.indexOf(",");
+        imageBase64 = photoDataUrl.slice(commaIdx + 1);
+        mimeType = "image/jpeg";
+      } else {
+        imageBase64 = await fileToBase64(file);
+        mimeType = file.type;
+      }
       const bucket = ageInfoFromDob(activeChild.dob).bucket;
       const res = await fetch("/api/ai/nutrition", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           image: imageBase64,
-          mimeType: file.type,
+          mimeType,
           ageBucket: bucket,
           knownAllergens: activeChild.allergens,
         }),
