@@ -16,7 +16,13 @@ import { useScanIntakeStore } from "@/stores/scanIntakeStore";
  * main bundle for users who never use barcode scanning.
  */
 
-type Phase = "idle" | "scanning" | "looking-up" | "not-found" | "error";
+type Phase =
+  | "idle"
+  | "scanning"
+  | "looking-up"
+  | "not-found"
+  | "parsing-label"
+  | "error";
 
 export default function BarcodeScanPage() {
   const locale = useLocale() as "zh-TW" | "en";
@@ -29,6 +35,7 @@ export default function BarcodeScanPage() {
   // keeps TypeScript happy without importing the type at build time.
   const scannerRef = useRef<unknown>(null);
   const decodingRef = useRef(false);
+  const labelInputRef = useRef<HTMLInputElement | null>(null);
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [lastCode, setLastCode] = useState<string>("");
@@ -146,6 +153,71 @@ export default function BarcodeScanPage() {
     window.location.reload();
   }
 
+  async function onLabelPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setPhase("parsing-label");
+    setErrorMsg("");
+
+    let dataUrl: string;
+    try {
+      dataUrl = await compressToDataUrl(file);
+    } catch (err) {
+      console.error("[barcode] compress failed:", err);
+      setErrorMsg(
+        err instanceof Error ? err.message : L("Image read failed", "圖片處理失敗"),
+      );
+      setPhase("error");
+      return;
+    }
+
+    const commaIdx = dataUrl.indexOf(",");
+    const base64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl;
+
+    let data: { found: boolean; food?: import("@/stores/mealStore").FoodItem; reason?: string };
+    try {
+      const res = await fetch("/api/ai/nutrition-label", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: base64,
+          mimeType: "image/jpeg",
+          barcode: lastCode || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`${res.status}: ${txt.slice(0, 120)}`);
+      }
+      data = (await res.json()) as {
+        found: boolean;
+        food?: import("@/stores/mealStore").FoodItem;
+        reason?: string;
+      };
+    } catch (err) {
+      console.error("[barcode] label OCR failed:", err);
+      setErrorMsg(
+        err instanceof Error ? err.message : L("Label read failed", "標籤辨識失敗"),
+      );
+      setPhase("error");
+      return;
+    }
+
+    if (!data.found || !data.food) {
+      setErrorMsg(
+        data.reason ??
+          L("Couldn't read the label — try a clearer photo.", "無法讀取標籤，請換張清楚的照片。"),
+      );
+      setPhase("error");
+      return;
+    }
+
+    setPendingFoods([data.food]);
+    router.push("/app/scan");
+  }
+
   return (
     <main className="min-h-screen bg-black text-white flex flex-col">
       <header className="flex items-center justify-between px-5 py-4 bg-black/70 backdrop-blur-sm z-10">
@@ -189,6 +261,11 @@ export default function BarcodeScanPage() {
               {L(`Looking up ${lastCode}…`, `查詢 ${lastCode}⋯`)}
             </p>
           )}
+          {phase === "parsing-label" && (
+            <p className="text-sm text-white/90 bg-black/50 rounded-full px-4 py-2">
+              {L("Reading the nutrition label…", "正在讀取營養標籤⋯")}
+            </p>
+          )}
           {phase === "not-found" && (
             <div className="bg-white rounded-bubble p-4 text-ink text-sm max-w-sm">
               <p className="font-semibold mb-1">
@@ -196,10 +273,17 @@ export default function BarcodeScanPage() {
               </p>
               <p className="text-ink-soft text-xs mb-3">
                 {L(
-                  `Barcode ${lastCode}. Try taking a photo of the label instead.`,
-                  `條碼 ${lastCode}。建議改用拍照方式記錄。`,
+                  `Barcode ${lastCode}. Snap the nutrition label on the back of the package — we'll read it for you.`,
+                  `條碼 ${lastCode}。拍一下包裝背面的營養標籤，我們幫你讀。`,
                 )}
               </p>
+              <button
+                type="button"
+                onClick={() => labelInputRef.current?.click()}
+                className="w-full mb-2 py-2.5 rounded-full bg-peach-deep text-white text-sm font-semibold"
+              >
+                📷 {L("Snap nutrition label", "拍營養標籤")}
+              </button>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -210,10 +294,10 @@ export default function BarcodeScanPage() {
                 </button>
                 <Link
                   href="/app"
-                  className="flex-1 py-2 rounded-full bg-peach-deep text-white text-sm font-medium text-center"
+                  className="flex-1 py-2 rounded-full border border-border text-ink-soft text-sm font-medium text-center"
                   onClick={() => void stopScanner()}
                 >
-                  {L("Back", "返回")}
+                  {L("Cancel", "取消")}
                 </Link>
               </div>
             </div>
@@ -221,19 +305,83 @@ export default function BarcodeScanPage() {
           {phase === "error" && (
             <div className="bg-white rounded-bubble p-4 text-ink text-sm max-w-sm">
               <p className="font-semibold mb-1">
-                {L("Couldn't open camera", "無法開啟相機")}
+                {L("Something went wrong", "出了點問題")}
               </p>
               <p className="text-ink-soft text-xs mb-3">{errorMsg}</p>
-              <Link
-                href="/app"
-                className="block w-full py-2 rounded-full bg-peach-deep text-white text-sm font-medium text-center"
-              >
-                {L("Back", "返回")}
-              </Link>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => labelInputRef.current?.click()}
+                  className="flex-1 py-2 rounded-full bg-peach-deep text-white text-sm font-semibold"
+                >
+                  📷 {L("Try label", "改用標籤")}
+                </button>
+                <Link
+                  href="/app"
+                  className="flex-1 py-2 rounded-full border border-border text-ink-soft text-sm font-medium text-center"
+                >
+                  {L("Back", "返回")}
+                </Link>
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Hidden input for the label-OCR fallback. Uses the device's native
+          picker (camera or library) — same pattern as the dashboard scan CTA. */}
+      <input
+        ref={labelInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={onLabelPhoto}
+      />
     </main>
   );
+}
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Resize + re-encode a picked photo to ~800px JPEG at 70% quality. Keeps
+ * the payload to Gemini small (~150-300 KB) regardless of phone camera
+ * resolution, which makes OCR faster and cheaper.
+ */
+function compressToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      if (typeof dataUrl !== "string") {
+        reject(new Error("Reader returned non-string"));
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        const maxEdge = 1200; // labels need a bit more detail than plates
+        const ratio = Math.min(1, maxEdge / Math.max(img.width, img.height));
+        const w = Math.round(img.width * ratio);
+        const h = Math.round(img.height * ratio);
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        try {
+          resolve(canvas.toDataURL("image/jpeg", 0.8));
+        } catch {
+          resolve(dataUrl);
+        }
+      };
+      img.onerror = () => reject(new Error("Image decode failed"));
+      img.src = dataUrl;
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Reader error"));
+    reader.readAsDataURL(file);
+  });
 }
