@@ -23,13 +23,6 @@ import { RDARing } from "@/components/pediatric/RDARing";
  * Everything centres on "did baby eat enough today?"
  */
 
-const MEAL_LABELS: Record<string, { en: string; "zh-TW": string }> = {
-  breakfast: { en: "Breakfast", "zh-TW": "早餐" },
-  lunch: { en: "Lunch", "zh-TW": "午餐" },
-  dinner: { en: "Dinner", "zh-TW": "晚餐" },
-  snack: { en: "Snack", "zh-TW": "點心" },
-};
-
 const QUICK_LINKS = [
   { emoji: "💬", href: "/app/chat" as const, en: "Ask Nibble", zh: "問 Nibble" },
   { emoji: "💩", href: "/app/poop/log" as const, en: "Poop log", zh: "便便紀錄" },
@@ -234,7 +227,6 @@ export default function AppDashboard() {
             </div>
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
               {todayMeals.map((meal) => {
-                const ml = MEAL_LABELS[meal.mealType];
                 return (
                   <Link
                     key={meal.id}
@@ -254,10 +246,9 @@ export default function AppDashboard() {
                       </div>
                     )}
                     <div className="p-2">
-                      <p className="text-xs font-medium text-ink truncate">
-                        {ml?.[locale] ?? meal.mealType}
+                      <p className="text-sm font-medium text-ink tabular-nums">
+                        {meal.time}
                       </p>
-                      <p className="text-[10px] text-ink-faded">{meal.time}</p>
                     </div>
                   </Link>
                 );

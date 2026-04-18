@@ -22,13 +22,6 @@ import { DISCLAIMERS } from "@/lib/pediatric/disclaimers";
  * Reached by tapping a meal card in history or from the dashboard.
  */
 
-const MEAL_TYPE_LABEL: Record<string, { en: string; "zh-TW": string; color: string }> = {
-  breakfast: { en: "Breakfast", "zh-TW": "早餐", color: "bg-butter/60 text-ink" },
-  lunch: { en: "Lunch", "zh-TW": "午餐", color: "bg-sage/40 text-ink" },
-  dinner: { en: "Dinner", "zh-TW": "晚餐", color: "bg-peach/40 text-ink" },
-  snack: { en: "Snack", "zh-TW": "點心", color: "bg-cream text-ink" },
-};
-
 export default function MealDetailPage({
   params,
 }: {
@@ -96,7 +89,6 @@ export default function MealDetailPage({
 
   const bucket = meal.ageBucketAtMeal;
   const priorityNutrients = PRIORITY_NUTRIENTS[bucket];
-  const mealMeta = MEAL_TYPE_LABEL[meal.mealType] ?? MEAL_TYPE_LABEL.lunch;
 
   // Allergen hits against active child's known allergens
   const knownAllergenHits: AllergenKey[] = (() => {
@@ -141,14 +133,9 @@ export default function MealDetailPage({
             </svg>
           </Link>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${mealMeta.color}`}>
-                {mealMeta[locale]}
-              </span>
-              <span className="text-sm text-ink-faded">
-                {dateDisplay} · {meal.time}
-              </span>
-            </div>
+            <span className="text-sm font-medium text-ink tabular-nums">
+              {dateDisplay} · {meal.time}
+            </span>
           </div>
           {meal.aiAnalyzed && (
             <span className="text-[10px] font-medium text-sage-deep bg-sage/20 px-2 py-0.5 rounded-full">
