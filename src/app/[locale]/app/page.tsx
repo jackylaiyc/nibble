@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useLocale } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
@@ -49,6 +49,7 @@ export default function AppDashboard() {
   const getMealsForDate = useMealStore((s) => s.getMealsForDate);
 
   const setPendingFile = useScanIntakeStore((s) => s.setPendingFile);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     loadChildren();
@@ -197,20 +198,25 @@ export default function AppDashboard() {
           )}
         </section>
 
-        {/* Scan CTA — tapping opens the device's native photo picker (camera + library) */}
-        <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-4 rounded-full bg-peach-deep text-white font-semibold text-lg bubble-shadow hover:bg-peach-deep/90 transition">
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handlePhotoChange}
-          />
+        {/* Scan CTA — tap opens the device's native photo picker immediately */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handlePhotoChange}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center justify-center gap-2 w-full py-4 rounded-full bg-peach-deep text-white font-semibold text-lg bubble-shadow hover:bg-peach-deep/90 transition"
+        >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
             <circle cx="12" cy="13" r="4" />
           </svg>
           {locale === "en" ? "Scan a plate" : "拍下餐盤"}
-        </label>
+        </button>
 
         {/* Today's meals strip */}
         {todayMeals.length > 0 && (

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { usePathname } from "next/navigation";
@@ -63,6 +64,7 @@ export function BottomNav() {
   const cleanPath = pathname.replace(/^\/(zh-TW|en)/, "") || "/";
 
   const setPendingFile = useScanIntakeStore((s) => s.setPendingFile);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   function isActive(tab: (typeof NAV_TABS)[number]): boolean {
     if (tab.exact) return cleanPath === tab.href;
@@ -110,24 +112,26 @@ export function BottomNav() {
       <div className="max-w-xl mx-auto flex items-center justify-around px-2 py-2">
         {renderLinkTab(NAV_TABS[0])}
 
-        {/* Scan tab — wrapping <label> so tapping opens the device's native
-            photo picker (camera + library) directly, no intermediate modal. */}
-        <label
-          className={`cursor-pointer flex flex-col items-center gap-0.5 min-w-0 px-3 py-1 transition-colors ${
+        {/* Scan tab — tap opens the device's native photo picker immediately */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handlePhotoChange}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className={`flex flex-col items-center gap-0.5 min-w-0 px-3 py-1 transition-colors ${
             scanActive ? "text-peach-deep" : "text-ink-faded hover:text-ink-soft"
           }`}
         >
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handlePhotoChange}
-          />
           <div className="bg-peach/20 rounded-full p-2">
             <CameraIcon />
           </div>
           <span className="text-[10px] font-medium leading-none">{t("scan")}</span>
-        </label>
+        </button>
 
         {renderLinkTab(NAV_TABS[1])}
         {renderLinkTab(NAV_TABS[2])}
