@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
@@ -14,7 +14,18 @@ import {
   type Nutrient,
 } from "@/lib/pediatric/rdaTables";
 import { computeCoverage, sumMeals } from "@/lib/pediatric/rdaGapAnalysis";
+import {
+  buildDailySummary,
+  dateToSummarize,
+} from "@/lib/pediatric/dailySummary";
 import { RDARing } from "@/components/pediatric/RDARing";
+import { DailySummaryCard } from "@/components/nutrition/DailySummaryCard";
+import {
+  fireLocalNotification,
+  getNotificationSupport,
+  requestNotificationPermission,
+  type NotificationSupport,
+} from "@/lib/notifications";
 
 /**
  * Dashboard — Today's nutrition is the hero.
@@ -44,10 +55,47 @@ export default function AppDashboard() {
   const setPendingFile = useScanIntakeStore((s) => s.setPendingFile);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Daily summary state — which date are we summarising, and whether the
+  // caregiver has dismissed it already. Lazy initializers read the client
+  // state exactly once on mount, avoiding cascading renders.
+  const [summaryDate] = useState<string>(() =>
+    typeof window === "undefined" ? "" : dateToSummarize(),
+  );
+  const [summaryDismissed, setSummaryDismissed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const d = dateToSummarize();
+    try {
+      return localStorage.getItem(`nibble_summary_dismissed_${d}`) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  // Notification permission — surfaced via a subtle "Enable reminders" button
+  // when default (not yet asked). Hidden if granted or denied.
+  const [notifState, setNotifState] = useState<NotificationSupport>(() =>
+    typeof window === "undefined" ? "unsupported" : getNotificationSupport(),
+  );
+
   useEffect(() => {
     loadChildren();
     loadMeals();
   }, [loadChildren, loadMeals]);
+
+  function dismissSummary() {
+    if (!summaryDate) return;
+    try {
+      localStorage.setItem(`nibble_summary_dismissed_${summaryDate}`, "1");
+    } catch {
+      /* ignore quota errors */
+    }
+    setSummaryDismissed(true);
+  }
+
+  async function enableReminders() {
+    const result = await requestNotificationPermission();
+    setNotifState(result);
+  }
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -94,6 +142,38 @@ export default function AppDashboard() {
     return { dailyCoverage: cov, gapSummary: summary };
   }, [activeChild, todayMeals, locale]);
 
+  // Build the daily summary for the "reflect on" date (today after 22:00,
+  // yesterday otherwise).
+  const dailySummary = useMemo(() => {
+    if (!activeChild || !summaryDate) return null;
+    const [y, m, d] = summaryDate.split("-").map(Number);
+    if (!y || !m || !d) return null;
+    const targetMeals = getMealsForDate(activeChild.id, new Date(y, m - 1, d));
+    if (targetMeals.length === 0) return null;
+    const bucket = ageInfoFromDob(activeChild.dob).bucket;
+    return buildDailySummary(targetMeals, bucket);
+  }, [activeChild, summaryDate, getMealsForDate]);
+
+  // Fire a local browser notification once per target-date, if permission
+  // has been granted. No-op on servers and on denied/default permission.
+  useEffect(() => {
+    if (!dailySummary || !summaryDate) return;
+    if (notifState !== "granted") return;
+    const notifKey = `nibble_summary_notified_${summaryDate}`;
+    if (typeof window === "undefined") return;
+    if (localStorage.getItem(notifKey) === "1") return;
+    const title = locale === "en" ? dailySummary.titleEn : dailySummary.titleZh;
+    const body = locale === "en" ? dailySummary.bodyEn : dailySummary.bodyZh;
+    const fired = fireLocalNotification(title, body, `nibble-summary-${summaryDate}`);
+    if (fired) {
+      try {
+        localStorage.setItem(notifKey, "1");
+      } catch {
+        /* ignore quota errors */
+      }
+    }
+  }, [dailySummary, summaryDate, notifState, locale]);
+
   const dailyCoverageByNutrient = useMemo(() => {
     const map: Partial<Record<Nutrient, (typeof dailyCoverage)[number]>> = {};
     for (const c of dailyCoverage) map[c.nutrient] = c;
@@ -121,13 +201,31 @@ export default function AppDashboard() {
         {/* Header */}
         <div className="flex items-center gap-3">
           <span className="text-3xl">{activeChild.avatar || "🍎"}</span>
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="font-display font-bold text-ink text-lg">
               {activeChild.name}
             </h1>
             <p className="text-sm text-ink-faded">{ageInfo.displayShort}</p>
           </div>
+          {notifState === "default" && (
+            <button
+              type="button"
+              onClick={enableReminders}
+              className="text-[11px] font-medium text-peach-deep px-3 py-1.5 rounded-full border border-peach-deep/30 hover:bg-peach/10 transition"
+            >
+              🔔 {locale === "en" ? "Enable reminders" : "開啟提醒"}
+            </button>
+          )}
         </div>
+
+        {/* Daily summary — shows after 10pm (for today) or next day until dismissed */}
+        {dailySummary && !summaryDismissed && (
+          <DailySummaryCard
+            summary={dailySummary}
+            locale={locale}
+            onDismiss={dismissSummary}
+          />
+        )}
 
         {/* Today's Nutrition Progress (hero) */}
         <section className="rounded-bubble bg-white card-pop p-5">
