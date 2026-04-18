@@ -298,10 +298,11 @@ export default function ChatPage() {
         </div>
       </section>
 
-      {/* Composer */}
+      {/* Composer — sits above the persistent BottomNav (~74px + safe area) */}
       <form
         onSubmit={onSubmit}
-        className="sticky bottom-0 z-20 border-t border-border bg-white/95 backdrop-blur-md px-4 py-3"
+        className="sticky z-20 border-t border-border bg-white/95 backdrop-blur-md px-4 py-3"
+        style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 80px)" }}
       >
         <div className="max-w-2xl mx-auto flex items-end gap-2">
           <textarea
