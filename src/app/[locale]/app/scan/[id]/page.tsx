@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, use } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Link } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
 import { useMealStore, type FoodItem } from "@/stores/mealStore";
 import type { AgeBucket } from "@/lib/pediatric/ageBucket";
@@ -30,6 +30,7 @@ export default function MealDetailPage({
   const { id } = use(params);
   const locale = useLocale() as "zh-TW" | "en";
   const t = useTranslations("Scan");
+  const router = useRouter();
 
   const loadChildren = useChildProfileStore((s) => s.loadFromStorage);
   const childLoaded = useChildProfileStore((s) => s.loaded);
@@ -38,6 +39,8 @@ export default function MealDetailPage({
   const loadMeals = useMealStore((s) => s.loadFromStorage);
   const mealsLoaded = useMealStore((s) => s.loaded);
   const meals = useMealStore((s) => s.meals);
+  const updateMeal = useMealStore((s) => s.updateMeal);
+  const removeMeal = useMealStore((s) => s.removeMeal);
 
   useEffect(() => {
     loadChildren();
@@ -48,11 +51,61 @@ export default function MealDetailPage({
 
   const [showAllNutrients, setShowAllNutrients] = useState(false);
 
+  // Edit mode — lets the caregiver amend the time, delete individual foods,
+  // or delete the whole meal. Defaults pull from the saved record; changes
+  // are local until the Save button commits them via updateMeal().
+  const [editMode, setEditMode] = useState(false);
+  const [editDate, setEditDate] = useState<string>("");
+  const [editTime, setEditTime] = useState<string>("");
+  const [editFoods, setEditFoods] = useState<FoodItem[]>([]);
+
+  function enterEditMode() {
+    if (!meal) return;
+    setEditDate(meal.date);
+    setEditTime(meal.time);
+    setEditFoods(meal.foods);
+    setEditMode(true);
+  }
+
+  function cancelEdit() {
+    setEditMode(false);
+  }
+
+  function deleteFoodAt(idx: number) {
+    setEditFoods((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function saveEdits() {
+    if (!meal) return;
+    updateMeal(meal.id, {
+      date: editDate,
+      time: editTime,
+      foods: editFoods,
+      totals: sumFoodTotals(editFoods),
+    });
+    setEditMode(false);
+  }
+
+  function deleteMeal() {
+    if (!meal) return;
+    const msg = locale === "en"
+      ? "Delete this meal? This can't be undone."
+      : "要刪除這筆餐點紀錄嗎？無法復原。";
+    if (!confirm(msg)) return;
+    removeMeal(meal.id);
+    router.push("/app/scan/history");
+  }
+
+  // In edit mode, display the pending (unsaved) list. Otherwise the saved list.
+  const displayFoods = editMode ? editFoods : meal?.foods ?? [];
+  const displayTotals = editMode ? sumFoodTotals(editFoods) : meal?.totals ?? {};
+
   // Coverage using the historical age bucket (snapshot at scan time)
   const coverage = useMemo(() => {
     if (!meal) return [];
-    return computeCoverage(meal.totals, meal.ageBucketAtMeal);
-  }, [meal]);
+    return computeCoverage(displayTotals, meal.ageBucketAtMeal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meal, editMode, editFoods]);
 
   const coverageByNutrient = useMemo(() => {
     const map: Partial<Record<Nutrient, (typeof coverage)[number]>> = {};
@@ -95,7 +148,7 @@ export default function MealDetailPage({
     if (!activeChild) return [];
     const known = new Set(activeChild.allergens);
     const hits = new Set<AllergenKey>();
-    for (const food of meal.foods) {
+    for (const food of displayFoods) {
       for (const a of food.allergensPresent ?? []) {
         if (known.has(a)) hits.add(a);
       }
@@ -119,7 +172,7 @@ export default function MealDetailPage({
   })();
 
   return (
-    <main className="min-h-screen bg-cream pb-28">
+    <main className="min-h-screen bg-cream pb-40">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-cream/95 backdrop-blur-md border-b border-border">
         <div className="max-w-xl mx-auto px-5 py-4 flex items-center gap-3">
@@ -137,12 +190,44 @@ export default function MealDetailPage({
               {dateDisplay} · {meal.time}
             </span>
           </div>
-          {meal.aiAnalyzed && (
-            <span className="text-[10px] font-medium text-sage-deep bg-sage/20 px-2 py-0.5 rounded-full">
-              AI ✨
-            </span>
+          {!editMode && (
+            <button
+              type="button"
+              onClick={enterEditMode}
+              className="text-xs font-semibold text-peach-deep px-3 py-1.5 rounded-full border border-peach-deep/30 hover:bg-peach/10 transition"
+            >
+              {locale === "en" ? "Edit" : "編輯"}
+            </button>
           )}
         </div>
+
+        {/* Date / time pickers in edit mode */}
+        {editMode && (
+          <div className="max-w-xl mx-auto px-5 pb-4 grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-[11px] text-ink-faded mb-1 block">
+                {t("mealDateField")}
+              </span>
+              <input
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-card border border-border bg-white text-ink text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[11px] text-ink-faded mb-1 block">
+                {t("mealTimeField")}
+              </span>
+              <input
+                type="time"
+                value={editTime}
+                onChange={(e) => setEditTime(e.target.value)}
+                className="w-full px-3 py-2 rounded-card border border-border bg-white text-ink text-sm"
+              />
+            </label>
+          </div>
+        )}
       </header>
 
       <div className="max-w-xl mx-auto px-5 py-6 space-y-6">
@@ -183,11 +268,25 @@ export default function MealDetailPage({
           <h2 className="font-display font-semibold text-ink mb-3">
             {t("foodsTitle")}
           </h2>
-          <ul className="space-y-3">
-            {meal.foods.map((food, i) => (
-              <FoodInsightCard key={`${food.name}-${i}`} food={food} locale={locale} t={t} />
-            ))}
-          </ul>
+          {displayFoods.length === 0 ? (
+            <p className="text-sm text-ink-faded italic">
+              {locale === "en"
+                ? "All foods removed. Save to update the meal."
+                : "所有食物都被移除了，點儲存以更新。"}
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {displayFoods.map((food, i) => (
+                <FoodInsightCard
+                  key={`${food.name}-${i}`}
+                  food={food}
+                  locale={locale}
+                  t={t}
+                  onDelete={editMode ? () => deleteFoodAt(i) : undefined}
+                />
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* Priority nutrient RDA rings */}
@@ -258,7 +357,7 @@ export default function MealDetailPage({
           </h2>
           <p className="text-xs text-ink-faded mb-4">{t("perFoodHint")}</p>
           <ul className="space-y-3">
-            {meal.foods.map((food, i) => (
+            {displayFoods.map((food, i) => (
               <PerFoodCard
                 key={`pf-${food.name}-${i}`}
                 name={food.name}
@@ -272,8 +371,64 @@ export default function MealDetailPage({
           </ul>
         </div>
       </div>
+
+      {/* Edit mode footer: save / cancel / delete whole meal */}
+      {editMode && (
+        <nav
+          className="fixed inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-border px-5 py-3"
+          style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 80px)" }}
+        >
+          <div className="max-w-xl mx-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={deleteMeal}
+              className="shrink-0 px-4 py-3 rounded-full border border-red-300 text-red-600 font-medium hover:bg-red-50 transition"
+              aria-label={locale === "en" ? "Delete meal" : "刪除餐點"}
+            >
+              🗑️
+            </button>
+            <button
+              type="button"
+              onClick={cancelEdit}
+              className="flex-1 px-4 py-3 rounded-full border border-border text-ink-soft font-medium hover:bg-cream transition"
+            >
+              {locale === "en" ? "Cancel" : "取消"}
+            </button>
+            <button
+              type="button"
+              onClick={saveEdits}
+              className="flex-1 px-4 py-3 rounded-full bg-sage-deep text-white font-semibold hover:bg-sage-deep/90 transition"
+            >
+              {locale === "en" ? "Save" : "儲存"}
+            </button>
+          </div>
+        </nav>
+      )}
     </main>
   );
+}
+
+// ─── helpers ───────────────────────────────────────────────────────────────
+
+type NutrientTotals = FoodItem["nutrients"];
+const NUTRIENT_KEYS: (keyof NutrientTotals)[] = [
+  "calories", "protein", "fat", "carbs", "fiber",
+  "iron", "zinc", "calcium", "vitaminD", "vitaminA",
+  "vitaminC", "dha", "sodium", "sugar",
+];
+
+/** Recompute per-meal totals by summing the nutrients of each remaining food. */
+function sumFoodTotals(foods: FoodItem[]): NutrientTotals {
+  const totals: NutrientTotals = {};
+  for (const food of foods) {
+    for (const k of NUTRIENT_KEYS) {
+      const v = food.nutrients[k];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        totals[k] = Math.round(((totals[k] ?? 0) + v) * 100) / 100;
+      }
+    }
+  }
+  return totals;
 }
 
 // ─── inline components ─────────────────────────────────────────────────────
@@ -282,10 +437,12 @@ function FoodInsightCard({
   food,
   locale,
   t,
+  onDelete,
 }: {
   food: FoodItem;
   locale: "zh-TW" | "en";
   t: ReturnType<typeof useTranslations>;
+  onDelete?: () => void;
 }) {
   const benefit = locale === "en" ? food.benefitEn : food.benefit;
   const risk = locale === "en" ? food.riskEn : food.risk;
@@ -334,6 +491,16 @@ function FoodInsightCard({
                 </span>
               ))}
             </div>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="size-7 rounded-full bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center text-sm"
+              aria-label={locale === "en" ? "Remove food" : "移除此食物"}
+            >
+              ×
+            </button>
           )}
         </div>
       </div>

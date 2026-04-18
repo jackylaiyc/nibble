@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
 import { useMealStore, type MealRecord } from "@/stores/mealStore";
-import { NUTRIENT_LABELS, type Nutrient } from "@/lib/pediatric/rdaTables";
+import { NUTRIENT_LABELS, RDA, type Nutrient } from "@/lib/pediatric/rdaTables";
 
 /**
  * Meal history — every saved plate, newest first, grouped by day.
@@ -185,16 +185,17 @@ function MealCard({
           <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
             {topNutrients.map((n) => {
               const value = record.totals[n] ?? 0;
-              const unit = NUTRIENT_LABELS[n];
+              const label = NUTRIENT_LABELS[n];
+              // Units are consistent across age buckets; pick any for display.
+              const unit = RDA[record.ageBucketAtMeal]?.[n]?.unit ?? "";
               return (
                 <span
                   key={n}
                   className="inline-flex items-center gap-1 rounded-full bg-cream border border-border px-2 py-0.5"
-                  title={unit[locale]}
                 >
-                  <span>{unit.emoji}</span>
+                  <span className="text-ink-soft">{label[locale]}</span>
                   <span className="text-ink tabular-nums font-medium">
-                    {Math.round(value * 10) / 10}
+                    {Math.round(value * 10) / 10}{unit}
                   </span>
                 </span>
               );
