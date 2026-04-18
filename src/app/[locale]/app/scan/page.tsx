@@ -6,6 +6,7 @@ import { useRouter, Link } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
 import { useMealStore, type FoodItem, type PortionUnit } from "@/stores/mealStore";
 import { useScanIntakeStore } from "@/stores/scanIntakeStore";
+import { sumFoodTotals } from "@/lib/nutrition/sumFoodTotals";
 import { ageInfoFromDob, type AgeBucket } from "@/lib/pediatric/ageBucket";
 import {
   getAllergen,
@@ -106,7 +107,8 @@ export default function ScanPage() {
   // Cross-page handoff: when the user picks a photo from the dashboard or
   // bottom-nav scan tab, the file lands in this store and we consume it on mount.
   const pendingFile = useScanIntakeStore((s) => s.pendingFile);
-  const setPendingFile = useScanIntakeStore((s) => s.setPendingFile);
+  const pendingFoods = useScanIntakeStore((s) => s.pendingFoods);
+  const clearIntake = useScanIntakeStore((s) => s.clear);
 
   // Hidden file input — the only photo-picking mechanism. Tapping any
   // surfaced button triggers a click on this input, which fires the device's
@@ -163,14 +165,35 @@ export default function ScanPage() {
     if (f) handlePickedFile(f);
   }
 
-  // Mount: consume any file handed off from the dashboard / bottom-nav.
-  // No file? We just render the big "tap to choose photo" surface — letting
-  // the user tap means the picker opens within a real user-gesture context
-  // (browsers can block programmatic clicks on file inputs without one).
+  // Mount: consume any intake handed off from the dashboard / bottom-nav /
+  // barcode scanner / search page.
+  //   - pendingFile → run Gemini on the photo
+  //   - pendingFoods → skip Gemini, jump straight to the review state
+  //   - neither → show the big "tap to choose photo" surface
   useEffect(() => {
     if (pendingFile) {
       handlePickedFile(pendingFile);
-      setPendingFile(null);
+      clearIntake();
+    } else if (pendingFoods && pendingFoods.length > 0) {
+      // Build the same result shape the Gemini path produces so the review
+      // UI below renders identically regardless of where the foods came from.
+      const apiFoods = pendingFoods.map((f) => ({
+        name: f.name,
+        nameEn: f.nameEn ?? f.name,
+        portionAmount: f.portionAmount,
+        portionUnit: f.portionUnit,
+        gramsEstimate: f.gramsEstimate,
+        nutrients: f.nutrients,
+        allergensPresent: f.allergensPresent ?? [],
+        source: f.source ?? "local-db",
+        benefit: f.benefit,
+        benefitEn: f.benefitEn,
+        risk: f.risk,
+        riskEn: f.riskEn,
+        suitability: f.suitability,
+      }));
+      setResult({ foods: apiFoods, totals: sumFoodTotals(pendingFoods) });
+      clearIntake();
     }
     // Intentionally only run on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps

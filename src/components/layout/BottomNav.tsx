@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef } from "react";
+import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Link, useRouter } from "@/i18n/navigation";
+import { Link } from "@/i18n/navigation";
 import { usePathname } from "next/navigation";
-import { useScanIntakeStore } from "@/stores/scanIntakeStore";
+import { ScanSourceSheet } from "@/components/scan/ScanSourceSheet";
 
 const NAV_TABS = [
   { key: "home" as const, href: "/app" as const, exact: true },
@@ -57,14 +57,12 @@ const TAB_ICONS = {
 } as const;
 
 export function BottomNav() {
-  useLocale(); // ensure locale context is available for Link
+  const locale = useLocale() as "zh-TW" | "en";
   const t = useTranslations("Nav");
   const pathname = usePathname();
-  const router = useRouter();
   const cleanPath = pathname.replace(/^\/(zh-TW|en)/, "") || "/";
 
-  const setPendingFile = useScanIntakeStore((s) => s.setPendingFile);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [scanSheetOpen, setScanSheetOpen] = useState(false);
 
   function isActive(tab: (typeof NAV_TABS)[number]): boolean {
     if (tab.exact) return cleanPath === tab.href;
@@ -76,14 +74,6 @@ export function BottomNav() {
   const scanActive =
     cleanPath === "/app/scan" ||
     (cleanPath.startsWith("/app/scan/") && !cleanPath.startsWith("/app/scan/history"));
-
-  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-picking the same file later
-    if (!file) return;
-    setPendingFile(file);
-    if (!scanActive) router.push("/app/scan");
-  }
 
   function renderLinkTab(tab: (typeof NAV_TABS)[number]) {
     const active = isActive(tab);
@@ -105,37 +95,38 @@ export function BottomNav() {
   }
 
   return (
-    <nav
-      className="fixed bottom-0 inset-x-0 z-50 bg-white/95 backdrop-blur-md border-t border-border"
-      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-    >
-      <div className="max-w-xl mx-auto flex items-center justify-around px-2 py-2">
-        {renderLinkTab(NAV_TABS[0])}
+    <>
+      <nav
+        className="fixed bottom-0 inset-x-0 z-50 bg-white/95 backdrop-blur-md border-t border-border"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      >
+        <div className="max-w-xl mx-auto flex items-center justify-around px-2 py-2">
+          {renderLinkTab(NAV_TABS[0])}
 
-        {/* Scan tab — tap opens the device's native photo picker immediately */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handlePhotoChange}
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className={`flex flex-col items-center gap-0.5 min-w-0 px-3 py-1 transition-colors ${
-            scanActive ? "text-peach-deep" : "text-ink-faded hover:text-ink-soft"
-          }`}
-        >
-          <div className="bg-peach/20 rounded-full p-2">
-            <CameraIcon />
-          </div>
-          <span className="text-[10px] font-medium leading-none">{t("scan")}</span>
-        </button>
+          {/* Scan tab — opens the ScanSourceSheet to pick photo / barcode / search */}
+          <button
+            type="button"
+            onClick={() => setScanSheetOpen(true)}
+            className={`flex flex-col items-center gap-0.5 min-w-0 px-3 py-1 transition-colors ${
+              scanActive ? "text-peach-deep" : "text-ink-faded hover:text-ink-soft"
+            }`}
+          >
+            <div className="bg-peach/20 rounded-full p-2">
+              <CameraIcon />
+            </div>
+            <span className="text-[10px] font-medium leading-none">{t("scan")}</span>
+          </button>
 
-        {renderLinkTab(NAV_TABS[1])}
-        {renderLinkTab(NAV_TABS[2])}
-      </div>
-    </nav>
+          {renderLinkTab(NAV_TABS[1])}
+          {renderLinkTab(NAV_TABS[2])}
+        </div>
+      </nav>
+
+      <ScanSourceSheet
+        open={scanSheetOpen}
+        locale={locale}
+        onClose={() => setScanSheetOpen(false)}
+      />
+    </>
   );
 }

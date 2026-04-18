@@ -14,6 +14,7 @@ import {
   type Nutrient,
 } from "@/lib/pediatric/rdaTables";
 import { computeCoverage } from "@/lib/pediatric/rdaGapAnalysis";
+import { sumFoodTotals } from "@/lib/nutrition/sumFoodTotals";
 import { RDARing } from "@/components/pediatric/RDARing";
 import { DISCLAIMERS } from "@/lib/pediatric/disclaimers";
 
@@ -406,29 +407,6 @@ export default function MealDetailPage({
       )}
     </main>
   );
-}
-
-// ─── helpers ───────────────────────────────────────────────────────────────
-
-type NutrientTotals = FoodItem["nutrients"];
-const NUTRIENT_KEYS: (keyof NutrientTotals)[] = [
-  "calories", "protein", "fat", "carbs", "fiber",
-  "iron", "zinc", "calcium", "vitaminD", "vitaminA",
-  "vitaminC", "dha", "sodium", "sugar",
-];
-
-/** Recompute per-meal totals by summing the nutrients of each remaining food. */
-function sumFoodTotals(foods: FoodItem[]): NutrientTotals {
-  const totals: NutrientTotals = {};
-  for (const food of foods) {
-    for (const k of NUTRIENT_KEYS) {
-      const v = food.nutrients[k];
-      if (typeof v === "number" && Number.isFinite(v)) {
-        totals[k] = Math.round(((totals[k] ?? 0) + v) * 100) / 100;
-      }
-    }
-  }
-  return totals;
 }
 
 // ─── inline components ─────────────────────────────────────────────────────
