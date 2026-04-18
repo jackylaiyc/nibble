@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useRouter, Link } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
 import { useMealStore, type FoodItem, type PortionUnit } from "@/stores/mealStore";
+import { useScanIntakeStore } from "@/stores/scanIntakeStore";
 import { ageInfoFromDob, type AgeBucket } from "@/lib/pediatric/ageBucket";
 import {
   getAllergen,
@@ -102,12 +103,17 @@ export default function ScanPage() {
 
   const [paywallOpen, setPaywallOpen] = useState(false);
 
-  // Capture / preview state. Two refs: one input forces the rear camera
-  // (`capture="environment"`), the other is a plain library picker.
-  // Splitting them lets the parent choose at the moment of upload instead
-  // of being shoehorned into a single iOS UA decision.
-  const cameraInputRef = useRef<HTMLInputElement | null>(null);
-  const libraryInputRef = useRef<HTMLInputElement | null>(null);
+  // Cross-page handoff: when the user picks a photo from the dashboard or
+  // bottom-nav scan tab, the file lands in this store and we consume it on mount.
+  const pendingFile = useScanIntakeStore((s) => s.pendingFile);
+  const setPendingFile = useScanIntakeStore((s) => s.setPendingFile);
+
+  // Hidden file input — the only photo-picking mechanism. Tapping any
+  // surfaced button triggers a click on this input, which fires the device's
+  // native picker (on iOS: a sheet with Photo Library / Take Photo / etc.).
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Capture / preview state.
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   // Hold the data URL alongside the File so we can persist it on save without
@@ -128,20 +134,47 @@ export default function ScanPage() {
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  // Meal-type, submission, results.
-  const [mealType, setMealType] = useState<MealType>("lunch");
+  // Submission / results.
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<NutritionApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedToast, setSavedToast] = useState(false);
   const [showAllNutrients, setShowAllNutrients] = useState(false);
 
-  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
+  // Caregiver-editable meal time (defaults to now). The mealType field on
+  // MealRecord is auto-derived from this on save so existing badges keep working.
+  const [mealDate, setMealDate] = useState<string>(() => todayKey());
+  const [mealTime, setMealTime] = useState<string>(() => currentHHMM());
+
+  // Track which file we've already auto-triggered analysis for, so the effect
+  // doesn't re-fire on every state change after a successful scan.
+  const triggeredForFileRef = useRef<File | null>(null);
+
+  function handlePickedFile(f: File) {
     setFile(f);
     setResult(null);
     setError(null);
+    triggeredForFileRef.current = null; // allow auto-analyze on the new file
   }
+
+  function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file later (e.g. retake → cancel → same)
+    if (f) handlePickedFile(f);
+  }
+
+  // Mount: consume any file handed off from the dashboard / bottom-nav.
+  // No file? We just render the big "tap to choose photo" surface — letting
+  // the user tap means the picker opens within a real user-gesture context
+  // (browsers can block programmatic clicks on file inputs without one).
+  useEffect(() => {
+    if (pendingFile) {
+      handlePickedFile(pendingFile);
+      setPendingFile(null);
+    }
+    // Intentionally only run on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function analyze() {
     // Guard against double-clicks and missing prerequisites
@@ -205,15 +238,26 @@ export default function ScanPage() {
     }
   }
 
+  // Auto-trigger analysis once we have everything we need. Guarded by a ref
+  // so it fires exactly once per file — without this, every state change
+  // (e.g. usage record) would reschedule the effect and cause loops.
+  useEffect(() => {
+    if (!file || !photoDataUrl || !activeChild || !usageLoaded) return;
+    if (analyzing || result || error) return;
+    if (triggeredForFileRef.current === file) return;
+    triggeredForFileRef.current = file;
+    void analyze();
+    // analyze is stable enough — exhaustive-deps would cause loops with state writes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, photoDataUrl, activeChild, usageLoaded, analyzing, result, error]);
+
   function save() {
     if (!result || !activeChild) return;
     const bucket = ageInfoFromDob(activeChild.dob).bucket;
-    const now = new Date();
-    const date = now.toISOString().slice(0, 10);
-    const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const derivedMealType = deriveMealType(mealTime);
     addMeal({
       childId: activeChild.id,
-      mealType,
+      mealType: derivedMealType,
       ageBucketAtMeal: bucket,
       foods: result.foods.map((f) => ({
         name: f.name,
@@ -231,8 +275,8 @@ export default function ScanPage() {
         suitability: f.suitability,
       })),
       totals: result.totals,
-      date,
-      time,
+      date: mealDate,
+      time: mealTime,
       notes: "",
       aiAnalyzed: true,
       photoDataUrl: photoDataUrl ?? undefined,
@@ -344,8 +388,18 @@ export default function ScanPage() {
         {/* Sub-hero */}
         {!result && <p className="text-ink-soft">{t("sub")}</p>}
 
-        {/* Photo capture / preview */}
+        {/* Photo preview — taps open the device's native picker directly */}
         <section>
+          {/* Hidden input — the only photo source on this page. Both the big
+              empty-state surface and the in-preview Retake button trigger it. */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={onFileInputChange}
+          />
+
           {preview ? (
             <div className="relative rounded-bubble overflow-hidden bg-black card-pop">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -355,17 +409,10 @@ export default function ScanPage() {
                 className="w-full max-h-[420px] object-contain"
               />
               {!result && (
-                <div className="absolute bottom-3 right-3 flex gap-2">
+                <div className="absolute bottom-3 right-3">
                   <button
                     type="button"
-                    onClick={() => libraryInputRef.current?.click()}
-                    className="rounded-full bg-white/90 backdrop-blur text-ink text-sm font-medium px-4 py-2 bubble-shadow"
-                  >
-                    🖼️ {t("fromLibrary")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => cameraInputRef.current?.click()}
+                    onClick={() => fileInputRef.current?.click()}
                     className="rounded-full bg-white/90 backdrop-blur text-ink text-sm font-medium px-4 py-2 bubble-shadow"
                   >
                     📸 {t("retake")}
@@ -374,67 +421,18 @@ export default function ScanPage() {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => cameraInputRef.current?.click()}
-                className="aspect-[4/3] rounded-bubble bg-white border-2 border-dashed border-border flex flex-col items-center justify-center gap-3 text-ink-soft hover:border-peach-deep hover:text-peach-deep transition"
-              >
-                <div className="text-5xl">📸</div>
-                <span className="font-medium text-center px-2">{t("choosePhoto")}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => libraryInputRef.current?.click()}
-                className="aspect-[4/3] rounded-bubble bg-white border-2 border-dashed border-border flex flex-col items-center justify-center gap-3 text-ink-soft hover:border-sage-deep hover:text-sage-deep transition"
-              >
-                <div className="text-5xl">🖼️</div>
-                <span className="font-medium text-center px-2">{t("fromLibrary")}</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full aspect-[4/3] rounded-bubble bg-white border-2 border-dashed border-border flex flex-col items-center justify-center gap-3 text-ink-soft hover:border-peach-deep hover:text-peach-deep transition"
+            >
+              <div className="text-5xl">📸</div>
+              <span className="font-medium text-center px-4">
+                {t("choosePhoto")}
+              </span>
+            </button>
           )}
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={onPickFile}
-            className="hidden"
-          />
-          <input
-            ref={libraryInputRef}
-            type="file"
-            accept="image/*"
-            onChange={onPickFile}
-            className="hidden"
-          />
         </section>
-
-        {/* Meal-type chips — only shown before analysis so we can bake the
-            choice into the record; after analyze the chips are hidden. */}
-        {preview && !result && !analyzing && (
-          <section>
-            <p className="text-sm font-medium text-ink mb-2">
-              {t("mealTypeLabel")}
-            </p>
-            <div className="grid grid-cols-4 gap-2">
-              {(["breakfast", "lunch", "dinner", "snack"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMealType(m)}
-                  className={`px-3 py-2 rounded-card text-sm font-medium transition-all ${
-                    mealType === m
-                      ? "bg-sage/40 ring-2 ring-sage-deep text-ink"
-                      : "bg-white border border-border text-ink-soft hover:border-sage-deep"
-                  }`}
-                >
-                  {t(`meal${cap(m)}` as "mealBreakfast")}
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
 
         {/* Error */}
         {error && (
@@ -702,33 +700,51 @@ export default function ScanPage() {
                 ))}
               </ul>
             </div>
+
+            {/* Meal time picker — defaulted to "now", caregiver can adjust before save */}
+            <div className="rounded-bubble bg-white card-pop p-5">
+              <p className="font-display font-semibold text-ink mb-3">
+                {t("mealWhenLabel")}
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs text-ink-faded mb-1 block">
+                    {t("mealDateField")}
+                  </span>
+                  <input
+                    type="date"
+                    value={mealDate}
+                    max={todayKey()}
+                    onChange={(e) => setMealDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-card border border-border bg-white text-ink text-base"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-ink-faded mb-1 block">
+                    {t("mealTimeField")}
+                  </span>
+                  <input
+                    type="time"
+                    value={mealTime}
+                    onChange={(e) => setMealTime(e.target.value)}
+                    className="w-full px-3 py-2 rounded-card border border-border bg-white text-ink text-base"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Save button — analyze runs automatically; save is the only manual action now */}
+            <button
+              type="button"
+              onClick={save}
+              disabled={savedToast}
+              className="w-full px-8 py-4 rounded-full bg-sage-deep text-white font-semibold text-lg bubble-shadow hover:bg-sage-deep/90 transition disabled:opacity-60"
+            >
+              {savedToast ? t("savedToast") : t("saveMeal")}
+            </button>
           </section>
         )}
       </div>
-
-      {/* Sticky CTA — analyze or save depending on state */}
-      {preview && !analyzing && (
-        <nav className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-border px-6 py-4">
-          <div className="max-w-xl mx-auto">
-            {!result ? (
-              <button
-                onClick={analyze}
-                className="w-full px-8 py-4 rounded-full bg-peach-deep text-white font-semibold text-lg bubble-shadow hover:bg-peach-deep/90 transition"
-              >
-                {t("analyze")} ✨
-              </button>
-            ) : (
-              <button
-                onClick={save}
-                disabled={savedToast}
-                className="w-full px-8 py-4 rounded-full bg-sage-deep text-white font-semibold text-lg bubble-shadow hover:bg-sage-deep/90 transition"
-              >
-                {savedToast ? t("savedToast") : t("saveMeal")}
-              </button>
-            )}
-          </div>
-        </nav>
-      )}
 
       <PaywallModal
         open={paywallOpen}
@@ -959,6 +975,30 @@ function compressToDataUrl(file: File): Promise<string> {
   });
 }
 
-function cap<T extends string>(s: T): Capitalize<T> {
-  return (s.charAt(0).toUpperCase() + s.slice(1)) as Capitalize<T>;
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function currentHHMM(): string {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/**
+ * Derive a sensible meal-type bucket from the picked time so saved records
+ * still carry a label for the dashboard / history / detail badges. The
+ * caregiver no longer chooses this directly — the time picker is the truth.
+ *
+ * 05:00–10:59 → breakfast · 11:00–14:59 → lunch · 17:00–20:59 → dinner
+ * Anything else (afternoon gap, evening, late night) → snack.
+ */
+function deriveMealType(hhmm: string): MealType {
+  const [hStr] = hhmm.split(":");
+  const h = Number(hStr);
+  if (Number.isNaN(h)) return "snack";
+  if (h >= 5 && h < 11) return "breakfast";
+  if (h >= 11 && h < 15) return "lunch";
+  if (h >= 17 && h < 21) return "dinner";
+  return "snack";
 }

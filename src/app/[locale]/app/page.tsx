@@ -5,6 +5,7 @@ import { useLocale } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
 import { useMealStore } from "@/stores/mealStore";
+import { useScanIntakeStore } from "@/stores/scanIntakeStore";
 import { ageInfoFromDob } from "@/lib/pediatric/ageBucket";
 import {
   PRIORITY_NUTRIENTS,
@@ -47,10 +48,20 @@ export default function AppDashboard() {
   const loadMeals = useMealStore((s) => s.loadFromStorage);
   const getMealsForDate = useMealStore((s) => s.getMealsForDate);
 
+  const setPendingFile = useScanIntakeStore((s) => s.setPendingFile);
+
   useEffect(() => {
     loadChildren();
     loadMeals();
   }, [loadChildren, loadMeals]);
+
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow picking the same file again later
+    if (!file) return;
+    setPendingFile(file);
+    router.push("/app/scan");
+  }
 
   useEffect(() => {
     if (childLoaded && !activeChild) {
@@ -186,17 +197,20 @@ export default function AppDashboard() {
           )}
         </section>
 
-        {/* Scan CTA */}
-        <Link
-          href="/app/scan"
-          className="flex items-center justify-center gap-2 w-full py-4 rounded-full bg-peach-deep text-white font-semibold text-lg bubble-shadow hover:bg-peach-deep/90 transition"
-        >
+        {/* Scan CTA — tapping opens the device's native photo picker (camera + library) */}
+        <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-4 rounded-full bg-peach-deep text-white font-semibold text-lg bubble-shadow hover:bg-peach-deep/90 transition">
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoChange}
+          />
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
             <circle cx="12" cy="13" r="4" />
           </svg>
           {locale === "en" ? "Scan a plate" : "拍下餐盤"}
-        </Link>
+        </label>
 
         {/* Today's meals strip */}
         {todayMeals.length > 0 && (
