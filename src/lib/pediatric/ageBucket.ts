@@ -14,12 +14,16 @@
 
 /** Key used to look up RDA + priority nutrients + food cautions. */
 export type LifeStageKey =
-  // Infant / toddler — unchanged from the old AgeBucket values.
+  // Infant / toddler / child — the `48mo+` key is preserved for back-compat
+  // with localStorage records but now represents 4–8 yr specifically (it
+  // used to be "4+ years, forever"). A separate `child-9-13yr` bucket picks
+  // up older children, matching the USDA DRI 9–13 age group boundary.
   | "6-8mo"
   | "9-11mo"
   | "12-23mo"
   | "24-47mo"
-  | "48mo+"
+  | "48mo+"          // now scoped to 4–8 yr; kept as key for record back-compat
+  | "child-9-13yr"   // pre-teen — calorie + protein + zinc jump, calcium peaks
   // Pregnancy by trimester.
   | "pregnant-T1"
   | "pregnant-T2"
@@ -48,10 +52,10 @@ export interface LifeStageInput {
 export type LifeStage =
   | {
       kind: "infant";
-      key: "6-8mo" | "9-11mo" | "12-23mo" | "24-47mo" | "48mo+";
+      key: "6-8mo" | "9-11mo" | "12-23mo" | "24-47mo" | "48mo+" | "child-9-13yr";
       months: number;
       years: number;
-      displayShort: string; // "9mo", "2y 3m"
+      displayShort: string; // "9mo", "2y 3m", "11y"
       isSupportedAge: boolean;
     }
   | {
@@ -93,7 +97,8 @@ export function bucketFromMonths(months: number): AgeBucket {
   if (months < 12) return "9-11mo";
   if (months < 24) return "12-23mo";
   if (months < 48) return "24-47mo";
-  return "48mo+";
+  if (months < 108) return "48mo+";      // 4–8 yr (DRI's "4–8 years")
+  return "child-9-13yr";                  // 9–13 yr (DRI's "9–13 years", sex-averaged)
 }
 
 export function ageInfoFromDob(dob: string | Date, now: Date = new Date()): AgeInfo {
@@ -108,7 +113,10 @@ export function ageInfoFromDob(dob: string | Date, now: Date = new Date()): AgeI
     months,
     years,
     displayShort,
-    isSupportedAge: months >= 6 && months < 60,
+    // Supported: 6 months through 13.99 years. Below 6mo the plate-scan
+    // hero feature doesn't apply (exclusive breast milk / formula); above
+    // 13 the teen/adult tracking lives in other products (MFP territory).
+    isSupportedAge: months >= 6 && months < 168,
   };
 }
 
@@ -203,12 +211,13 @@ export function getLifeStage(input: LifeStageInput, now: Date = new Date()): Lif
 // ─── labels ────────────────────────────────────────────────────────────────
 
 export const AGE_BUCKET_LABELS: Record<AgeBucket, { en: string; "zh-TW": string }> = {
-  // Infant / toddler
+  // Infant / toddler / child
   "6-8mo": { en: "6–8 months", "zh-TW": "6–8 個月" },
   "9-11mo": { en: "9–11 months", "zh-TW": "9–11 個月" },
   "12-23mo": { en: "12–23 months", "zh-TW": "1–2 歲" },
   "24-47mo": { en: "2–4 years", "zh-TW": "2–4 歲" },
-  "48mo+": { en: "4+ years", "zh-TW": "4 歲以上" },
+  "48mo+": { en: "4–8 years", "zh-TW": "4–8 歲" },         // formerly "4+ years"
+  "child-9-13yr": { en: "9–13 years", "zh-TW": "9–13 歲" },
   // Pregnancy
   "pregnant-T1": { en: "Pregnant · 1st trimester", "zh-TW": "懷孕 · 第一孕期" },
   "pregnant-T2": { en: "Pregnant · 2nd trimester", "zh-TW": "懷孕 · 第二孕期" },

@@ -433,11 +433,12 @@ function Step2Dob({
   setDob: (s: string) => void;
   ageInfo: ReturnType<typeof ageInfoFromDob> | null;
 }) {
-  // Bound to today — prevents future DOBs — and 8 years back (we serve
-  // through 4yr but leave headroom for siblings the caregiver may add later).
+  // Bound to today (no future DOBs) and 13 years back. Nibble supports
+  // 6mo–13yr inclusive via `child-9-13yr`; above 13 is teen/adult
+  // territory that lives in other products.
   const today = new Date().toISOString().slice(0, 10);
   const minDate = new Date();
-  minDate.setFullYear(minDate.getFullYear() - 8);
+  minDate.setFullYear(minDate.getFullYear() - 13);
   const min = minDate.toISOString().slice(0, 10);
 
   return (

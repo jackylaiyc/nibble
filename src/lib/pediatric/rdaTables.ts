@@ -115,6 +115,8 @@ export const RDA: Record<AgeBucket, RdaRow> = {
     sugar: { value: 25, unit: "g", isUpperLimit: true },
   },
   "48mo+": {
+    // 4–8 years (USDA DRI single bucket for this age range). Previous label
+    // was "4+ years" which incorrectly implied coverage forever.
     calories: { value: 1400, unit: "kcal" },
     protein: { value: 19, unit: "g" },
     fat: { value: 40, unit: "g" },
@@ -128,6 +130,30 @@ export const RDA: Record<AgeBucket, RdaRow> = {
     vitaminC: { value: 25, unit: "mg" },
     dha: { value: 200, unit: "mg" },
     sodium: { value: 1500, unit: "mg", isUpperLimit: true },
+    sugar: { value: 25, unit: "g", isUpperLimit: true },
+  },
+
+  // ─── Pre-teen (9–13 years) ─────────────────────────────────────────────
+  // USDA DRI 9–13 age bucket. Sex-averaged — the main difference between
+  // male and female at this age is ~200 kcal (1800 F / 2000 M). Iron, zinc,
+  // calcium, protein are identical. Calcium peaks here (bone-building
+  // window) at 1300 mg — the highest requirement in the lifetime outside
+  // lactation. Iron stays at 8 mg (pre-menarche); will jump to 15 mg for
+  // menstruating girls starting at 14 (out of scope for this iteration).
+  "child-9-13yr": {
+    calories: { value: 1900, unit: "kcal" },     // averaged F/M
+    protein: { value: 34, unit: "g" },
+    fat: { value: 65, unit: "g" },
+    carbs: { value: 130, unit: "g" },
+    fiber: { value: 28, unit: "g" },              // averaged F/M (26/31)
+    iron: { value: 8, unit: "mg" },
+    zinc: { value: 8, unit: "mg" },
+    calcium: { value: 1300, unit: "mg" },         // peak-bone-mass window
+    vitaminD: { value: 600, unit: "IU" },
+    vitaminA: { value: 2000, unit: "IU" },        // 600 mcg RAE × 3.33
+    vitaminC: { value: 45, unit: "mg" },
+    dha: { value: 200, unit: "mg" },
+    sodium: { value: 2200, unit: "mg", isUpperLimit: true },
     sugar: { value: 25, unit: "g", isUpperLimit: true },
   },
 
@@ -276,12 +302,15 @@ export const NUTRIENT_LABELS: Record<Nutrient, { en: string; "zh-TW": string; em
  * - Breastfeeding: iodine (highest lifetime), DHA, calcium, choline, caffeine
  */
 export const PRIORITY_NUTRIENTS: Record<AgeBucket, Nutrient[]> = {
-  // Infant / toddler — unchanged
+  // Infant / toddler / child
   "6-8mo": ["iron", "zinc", "protein", "dha", "calories"],
   "9-11mo": ["iron", "zinc", "protein", "dha", "calories"],
   "12-23mo": ["iron", "calcium", "vitaminD", "dha", "fiber"],
   "24-47mo": ["calcium", "vitaminD", "fiber", "iron", "sugar"],
   "48mo+": ["calcium", "vitaminD", "fiber", "iron", "sugar"],
+  // Pre-teen (9–13): calcium is peak-of-lifetime at 1300 mg; protein nearly
+  // doubles vs 4–8; puberty onset drives zinc + vitamin D needs.
+  "child-9-13yr": ["calcium", "protein", "vitaminD", "iron", "fiber"],
   // Pregnancy — folate spotlighted in T1 (neural tube development window)
   "pregnant-T1": ["folate", "iron", "dha", "calcium", "caffeine"],
   "pregnant-T2": ["iron", "dha", "calcium", "choline", "caffeine"],

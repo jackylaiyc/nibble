@@ -125,7 +125,9 @@ const LIFE_STAGE_CONTEXT: Record<LifeStageKey, string> = {
   "24-47mo":
     "This person is a 2-4 year old child. Priority: calcium, vitamin D, fiber, iron. Watch added sugar and sodium.",
   "48mo+":
-    "This person is 4+ years old. Priority: calcium, vitamin D, fiber, iron. Watch added sugar and sodium.",
+    "This person is 4-8 years old. Priority: calcium, vitamin D, fiber, iron. Watch added sugar and sodium.",
+  "child-9-13yr":
+    "This person is 9-13 years old (pre-teen). Calcium peaks at 1300 mg/day — this is the peak bone-mass window. Protein needs have nearly doubled vs 4-8yr (34 g). Puberty is starting or imminent; zinc + vitamin D + iron all matter. Watch added sugar and sodium; encourage whole grains, dairy, and lean protein.",
   "pregnant-T1":
     "This person is pregnant in the 1st trimester. Highlight folate, iron, and DHA. Mark as 'avoid': alcohol, raw/undercooked fish/meat/eggs, unpasteurized soft cheese, high-mercury fish (shark/swordfish/king mackerel/tilefish/big-eye tuna), pâté, liver, deli meats unless reheated, raw sprouts. Mark as 'caution': caffeine (limit 200 mg/day), canned light tuna (≤12 oz/wk), large amounts of sage/peppermint/chamomile tea.",
   "pregnant-T2":
