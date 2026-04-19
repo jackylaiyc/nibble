@@ -208,7 +208,9 @@ export const MILESTONES: MilestoneInfo[] = [
  * appear first. Older milestones are still visible — caregivers love to
  * peek ahead at what's coming.
  */
-const BUCKET_ORDER: Record<AgeBucket, number> = {
+// Partial — only infant buckets are relevant; maternal life-stage keys won't
+// appear as milestone sort keys (pregnant women don't have baby milestones).
+const BUCKET_ORDER: Partial<Record<AgeBucket, number>> = {
   "6-8mo": 0,
   "9-11mo": 1,
   "12-23mo": 2,
@@ -219,7 +221,7 @@ const BUCKET_ORDER: Record<AgeBucket, number> = {
 /** Sorted by typical bucket, then alphabetical by key for stability. */
 export function milestonesSorted(): MilestoneInfo[] {
   return [...MILESTONES].sort((a, b) => {
-    const d = BUCKET_ORDER[a.typicalBucket] - BUCKET_ORDER[b.typicalBucket];
+    const d = (BUCKET_ORDER[a.typicalBucket] ?? 99) - (BUCKET_ORDER[b.typicalBucket] ?? 99);
     if (d !== 0) return d;
     return a.key.localeCompare(b.key);
   });

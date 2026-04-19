@@ -26,7 +26,13 @@ export type Nutrient =
   | "vitaminC"     // mg
   | "dha"          // mg
   | "sodium"       // mg (upper limit)
-  | "sugar";       // g (upper limit, added sugar)
+  | "sugar"        // g (upper limit, added sugar)
+  // New — maternal life-stage nutrients.
+  | "folate"       // mcg DFE — critical early in pregnancy
+  | "choline"      // mg — fetal brain + lactation
+  | "iodine"       // mcg — fetal thyroid + milk
+  | "caffeine"     // mg (upper limit) — exposure tracking
+  | "alcohol";     // g  (upper limit) — near-zero for pregnancy
 
 export interface RdaTarget {
   value: number;
@@ -35,7 +41,13 @@ export interface RdaTarget {
   isUpperLimit?: boolean;
 }
 
-export type RdaRow = Record<Nutrient, RdaTarget>;
+/**
+ * Per-life-stage nutrient targets. Rows are PARTIAL — not every life stage
+ * needs to track every nutrient (e.g. infants don't track caffeine, pregnant
+ * women track folate which infants don't). Consumers iterate via
+ * `Object.keys(row)` and treat absent keys as "not applicable".
+ */
+export type RdaRow = Partial<Record<Nutrient, RdaTarget>>;
 
 export const RDA: Record<AgeBucket, RdaRow> = {
   "6-8mo": {
@@ -118,6 +130,120 @@ export const RDA: Record<AgeBucket, RdaRow> = {
     sodium: { value: 1500, unit: "mg", isUpperLimit: true },
     sugar: { value: 25, unit: "g", isUpperLimit: true },
   },
+
+  // ─── Pregnancy ─────────────────────────────────────────────────────────
+  // Sources: ACOG, NIH ODS, USDA Dietary Guidelines.
+  // All three trimesters share nutrient targets except calories (scales up).
+  // Upper limits for pregnancy: caffeine ≤200 mg/day, alcohol zero tolerance.
+  "pregnant-T1": {
+    calories: { value: 1800, unit: "kcal" },
+    protein: { value: 71, unit: "g" },
+    fat: { value: 70, unit: "g" },
+    carbs: { value: 175, unit: "g" },
+    fiber: { value: 28, unit: "g" },
+    iron: { value: 27, unit: "mg" },
+    zinc: { value: 11, unit: "mg" },
+    calcium: { value: 1000, unit: "mg" },
+    vitaminD: { value: 600, unit: "IU" },
+    vitaminA: { value: 2567, unit: "IU" },  // 770 mcg RAE × 3.33
+    vitaminC: { value: 85, unit: "mg" },
+    dha: { value: 200, unit: "mg" },
+    folate: { value: 600, unit: "mcg" },
+    choline: { value: 450, unit: "mg" },
+    iodine: { value: 220, unit: "mcg" },
+    sodium: { value: 2300, unit: "mg", isUpperLimit: true },
+    sugar: { value: 25, unit: "g", isUpperLimit: true },
+    caffeine: { value: 200, unit: "mg", isUpperLimit: true },
+    alcohol: { value: 0, unit: "g", isUpperLimit: true },
+  },
+  "pregnant-T2": {
+    calories: { value: 2200, unit: "kcal" },  // +340 vs T1
+    protein: { value: 71, unit: "g" },
+    fat: { value: 75, unit: "g" },
+    carbs: { value: 175, unit: "g" },
+    fiber: { value: 28, unit: "g" },
+    iron: { value: 27, unit: "mg" },
+    zinc: { value: 11, unit: "mg" },
+    calcium: { value: 1000, unit: "mg" },
+    vitaminD: { value: 600, unit: "IU" },
+    vitaminA: { value: 2567, unit: "IU" },
+    vitaminC: { value: 85, unit: "mg" },
+    dha: { value: 200, unit: "mg" },
+    folate: { value: 600, unit: "mcg" },
+    choline: { value: 450, unit: "mg" },
+    iodine: { value: 220, unit: "mcg" },
+    sodium: { value: 2300, unit: "mg", isUpperLimit: true },
+    sugar: { value: 25, unit: "g", isUpperLimit: true },
+    caffeine: { value: 200, unit: "mg", isUpperLimit: true },
+    alcohol: { value: 0, unit: "g", isUpperLimit: true },
+  },
+  "pregnant-T3": {
+    calories: { value: 2400, unit: "kcal" },  // +450 vs pre-pregnancy
+    protein: { value: 71, unit: "g" },
+    fat: { value: 80, unit: "g" },
+    carbs: { value: 175, unit: "g" },
+    fiber: { value: 28, unit: "g" },
+    iron: { value: 27, unit: "mg" },
+    zinc: { value: 11, unit: "mg" },
+    calcium: { value: 1000, unit: "mg" },
+    vitaminD: { value: 600, unit: "IU" },
+    vitaminA: { value: 2567, unit: "IU" },
+    vitaminC: { value: 85, unit: "mg" },
+    dha: { value: 200, unit: "mg" },
+    folate: { value: 600, unit: "mcg" },
+    choline: { value: 450, unit: "mg" },
+    iodine: { value: 220, unit: "mcg" },
+    sodium: { value: 2300, unit: "mg", isUpperLimit: true },
+    sugar: { value: 25, unit: "g", isUpperLimit: true },
+    caffeine: { value: 200, unit: "mg", isUpperLimit: true },
+    alcohol: { value: 0, unit: "g", isUpperLimit: true },
+  },
+
+  // ─── Breastfeeding ─────────────────────────────────────────────────────
+  // Higher iodine than pregnancy (milk transfer); lower iron (no blood loss);
+  // more lenient caffeine + alcohol (still advise timing around nursing).
+  "lactation-0-6mo": {
+    calories: { value: 2300, unit: "kcal" },  // +330-400 over baseline
+    protein: { value: 71, unit: "g" },
+    fat: { value: 75, unit: "g" },
+    carbs: { value: 210, unit: "g" },
+    fiber: { value: 29, unit: "g" },
+    iron: { value: 9, unit: "mg" },
+    zinc: { value: 12, unit: "mg" },
+    calcium: { value: 1000, unit: "mg" },
+    vitaminD: { value: 600, unit: "IU" },
+    vitaminA: { value: 4300, unit: "IU" },  // 1300 mcg RAE × 3.33 (highest lifetime)
+    vitaminC: { value: 120, unit: "mg" },
+    dha: { value: 200, unit: "mg" },
+    folate: { value: 500, unit: "mcg" },
+    choline: { value: 550, unit: "mg" },
+    iodine: { value: 290, unit: "mcg" },  // HIGHER than pregnancy
+    sodium: { value: 2300, unit: "mg", isUpperLimit: true },
+    sugar: { value: 25, unit: "g", isUpperLimit: true },
+    caffeine: { value: 300, unit: "mg", isUpperLimit: true },
+    alcohol: { value: 14, unit: "g", isUpperLimit: true },  // ~1 std drink occasional
+  },
+  "lactation-7+mo": {
+    calories: { value: 2200, unit: "kcal" },  // tapers as baby starts solids
+    protein: { value: 71, unit: "g" },
+    fat: { value: 73, unit: "g" },
+    carbs: { value: 210, unit: "g" },
+    fiber: { value: 29, unit: "g" },
+    iron: { value: 9, unit: "mg" },
+    zinc: { value: 12, unit: "mg" },
+    calcium: { value: 1000, unit: "mg" },
+    vitaminD: { value: 600, unit: "IU" },
+    vitaminA: { value: 4300, unit: "IU" },
+    vitaminC: { value: 120, unit: "mg" },
+    dha: { value: 200, unit: "mg" },
+    folate: { value: 500, unit: "mcg" },
+    choline: { value: 550, unit: "mg" },
+    iodine: { value: 290, unit: "mcg" },
+    sodium: { value: 2300, unit: "mg", isUpperLimit: true },
+    sugar: { value: 25, unit: "g", isUpperLimit: true },
+    caffeine: { value: 300, unit: "mg", isUpperLimit: true },
+    alcohol: { value: 14, unit: "g", isUpperLimit: true },
+  },
 };
 
 export const NUTRIENT_LABELS: Record<Nutrient, { en: string; "zh-TW": string; emoji: string }> = {
@@ -135,16 +261,32 @@ export const NUTRIENT_LABELS: Record<Nutrient, { en: string; "zh-TW": string; em
   dha: { en: "DHA", "zh-TW": "DHA", emoji: "🐟" },
   sodium: { en: "Sodium", "zh-TW": "鈉", emoji: "🧂" },
   sugar: { en: "Added sugar", "zh-TW": "添加糖", emoji: "🍭" },
+  // Maternal-life-stage nutrients
+  folate: { en: "Folate", "zh-TW": "葉酸", emoji: "🌿" },
+  choline: { en: "Choline", "zh-TW": "膽鹼", emoji: "🧠" },
+  iodine: { en: "Iodine", "zh-TW": "碘", emoji: "🌊" },
+  caffeine: { en: "Caffeine", "zh-TW": "咖啡因", emoji: "☕" },
+  alcohol: { en: "Alcohol", "zh-TW": "酒精", emoji: "🚫" },
 };
 
 /**
- * Priority nutrients to surface prominently for each age bucket.
- * Based on AAP "nutrients of concern" for infants and toddlers.
+ * Priority nutrients to surface prominently for each life stage.
+ * - Infants: AAP "nutrients of concern"
+ * - Pregnancy: folate (T1), iron, DHA, calcium, choline, caffeine
+ * - Breastfeeding: iodine (highest lifetime), DHA, calcium, choline, caffeine
  */
 export const PRIORITY_NUTRIENTS: Record<AgeBucket, Nutrient[]> = {
+  // Infant / toddler — unchanged
   "6-8mo": ["iron", "zinc", "protein", "dha", "calories"],
   "9-11mo": ["iron", "zinc", "protein", "dha", "calories"],
   "12-23mo": ["iron", "calcium", "vitaminD", "dha", "fiber"],
   "24-47mo": ["calcium", "vitaminD", "fiber", "iron", "sugar"],
   "48mo+": ["calcium", "vitaminD", "fiber", "iron", "sugar"],
+  // Pregnancy — folate spotlighted in T1 (neural tube development window)
+  "pregnant-T1": ["folate", "iron", "dha", "calcium", "caffeine"],
+  "pregnant-T2": ["iron", "dha", "calcium", "choline", "caffeine"],
+  "pregnant-T3": ["iron", "dha", "calcium", "choline", "caffeine"],
+  // Breastfeeding — iodine is the highest lifetime target (milk transfer)
+  "lactation-0-6mo": ["iodine", "dha", "calcium", "choline", "caffeine"],
+  "lactation-7+mo": ["iodine", "dha", "calcium", "choline", "caffeine"],
 };

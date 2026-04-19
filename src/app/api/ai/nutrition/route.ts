@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchLocalFoodDb } from "@/lib/nutrition/localFoodDb";
-import type { AgeBucket } from "@/lib/pediatric/ageBucket";
+import type { AgeBucket, LifeStageKey } from "@/lib/pediatric/ageBucket";
 import type { AllergenKey } from "@/lib/pediatric/allergenRegistry";
+import { applyLifeStageCautions } from "@/lib/pediatric/lifeStageWarnings";
 
 /**
  * POST /api/ai/nutrition — baby plate-scan endpoint.
@@ -109,11 +110,40 @@ interface ErrorPayload {
 
 // ─── prompt construction ──────────────────────────────────────────────────
 
-function buildVisionPrompt(): string {
-  // No restrictions, no safety filters, no age gating. Just identify the food
-  // and return JSON. The optional benefit/risk/suitability fields are purely
-  // informational tags — Gemini must NEVER use them to refuse a photo.
+/**
+ * Per-life-stage context block injected into the base food-ID prompt.
+ * Gemini's `suitability` guess is a helpful first pass, but we ENFORCE the
+ * hard rules server-side via `applyLifeStageCautions` after parsing.
+ */
+const LIFE_STAGE_CONTEXT: Record<LifeStageKey, string> = {
+  "6-8mo":
+    "This person is a 6-8 month old baby starting solids. Highlight foods rich in iron, zinc, protein, and DHA. Note choking hazards and honey risk under 12 months.",
+  "9-11mo":
+    "This person is a 9-11 month old baby. Same priority as 6-8mo plus variety. Finger foods must be soft and pea-sized to avoid choking.",
+  "12-23mo":
+    "This person is a 12-23 month old toddler. Priority: iron, calcium, vitamin D, DHA, fiber. Whole milk permitted.",
+  "24-47mo":
+    "This person is a 2-4 year old child. Priority: calcium, vitamin D, fiber, iron. Watch added sugar and sodium.",
+  "48mo+":
+    "This person is 4+ years old. Priority: calcium, vitamin D, fiber, iron. Watch added sugar and sodium.",
+  "pregnant-T1":
+    "This person is pregnant in the 1st trimester. Highlight folate, iron, and DHA. Mark as 'avoid': alcohol, raw/undercooked fish/meat/eggs, unpasteurized soft cheese, high-mercury fish (shark/swordfish/king mackerel/tilefish/big-eye tuna), pâté, liver, deli meats unless reheated, raw sprouts. Mark as 'caution': caffeine (limit 200 mg/day), canned light tuna (≤12 oz/wk), large amounts of sage/peppermint/chamomile tea.",
+  "pregnant-T2":
+    "This person is pregnant in the 2nd trimester. Same avoidance rules as T1 (alcohol, raw fish/meat/eggs, unpasteurized cheese, high-mercury fish, deli meats). Calorie needs increase ~340 kcal/day. Caffeine limit 200 mg/day.",
+  "pregnant-T3":
+    "This person is pregnant in the 3rd trimester. Same avoidance rules as T1/T2. Calorie needs ~450 kcal/day above baseline. Watch sodium (swelling), iron (anaemia), caffeine (200 mg/day).",
+  "lactation-0-6mo":
+    "This person is breastfeeding, 0-6 months postpartum. Needs ~330-400 extra kcal, highest lifetime iodine target, high choline. Mark as 'caution': alcohol (time 2-3h before nursing, ≤1 drink), caffeine (>300 mg may affect baby sleep), high-mercury fish (mercury passes to milk).",
+  "lactation-7+mo":
+    "This person is breastfeeding, 7+ months postpartum. Same cautions as 0-6mo. Calorie needs taper slightly as baby starts solids.",
+};
+
+function buildVisionPrompt(stage: LifeStageKey): string {
+  const ctx = LIFE_STAGE_CONTEXT[stage];
   return `You are a food identification model. Look at the photo and identify every food item you can see. Always return a JSON object with a "foods" array.
+
+PERSON CONTEXT
+${ctx}
 
 For each food item, include:
 - name: name in zh-TW (e.g. "南瓜泥", "鰻魚飯")
@@ -123,19 +153,15 @@ For each food item, include:
 - calories (kcal), protein (g), carbs (g), fat (g), fiber (g), sugar (g), sodium (g) — scaled to this portion, NOT per 100g
 - allergens_present: array subset of ["milk","egg","peanut","treeNut","wheat","soy","fish","shellfish","sesame","shrimp","crab","buckwheat","celery"]
 - iron_mg, zinc_mg, calcium_mg, vitaminD_iu, vitaminA_iu, vitaminC_mg, dha_mg — best guess scaled to portion (omit if unsure)
-- benefit: 1 sentence in zh-TW about the food's nutritional benefit. Example: "南瓜富含維他命A與纖維，有助視力與消化。"
+- folate_mcg, choline_mg, iodine_mcg, caffeine_mg, alcohol_g — include when present (critical for pregnant/breastfeeding users)
+- benefit: 1 sentence in zh-TW about the food's nutritional benefit FOR THIS PERSON. Example for pregnant: "菠菜富含葉酸與鐵，對懷孕早期胎兒神經管發育特別重要。"
 - benefit_en: same sentence in English
-- risk: 1 sentence in zh-TW about any practical caution (e.g. choking, sodium). Use "" if none.
+- risk: 1 sentence in zh-TW about any practical caution FOR THIS PERSON. Use "" if none.
 - risk_en: same in English. Use "" if none.
-- suitability: one of "excellent" | "good" | "caution" — purely informational tag based on common nutrition guidance. Default to "good" when unsure. Never refuse a food.
+- suitability: one of "excellent" | "good" | "caution" | "avoid" — informed by the PERSON CONTEXT above. Use "avoid" for hard-rule violations (e.g. alcohol for pregnant users). Default to "good" when unsure. Never refuse a photo.
 
-EXAMPLE:
-{
-  "foods": [
-    {"name":"南瓜泥","name_en":"pumpkin puree","portion_amount":2,"portion_unit":"tbsp","portion_grams":30,"calories":12,"protein":0.4,"carbs":3,"fat":0.1,"fiber":0.5,"sugar":1.2,"sodium":0.001,"allergens_present":[],"iron_mg":0.2,"zinc_mg":0.1,"calcium_mg":5,"vitaminA_iu":1800,"vitaminC_mg":2.5,"benefit":"南瓜富含維他命A與纖維。","benefit_en":"Pumpkin is rich in vitamin A and fiber.","risk":"","risk_en":"","suitability":"excellent"},
-    {"name":"鰻魚飯","name_en":"eel rice","portion_amount":1,"portion_unit":"piece","portion_grams":120,"calories":280,"protein":18,"carbs":35,"fat":8,"fiber":0.5,"sugar":3,"sodium":0.45,"allergens_present":["fish","soy"],"iron_mg":0.6,"zinc_mg":1.6,"calcium_mg":25,"vitaminD_iu":920,"vitaminA_iu":1200,"benefit":"鰻魚富含維他命D與omega-3。","benefit_en":"Eel is rich in vitamin D and omega-3.","risk":"鈉含量偏高。","risk_en":"Higher in sodium.","suitability":"good"}
-  ]
-}
+EXAMPLE (6-9mo baby):
+{"foods":[{"name":"南瓜泥","name_en":"pumpkin puree","portion_amount":2,"portion_unit":"tbsp","portion_grams":30,"calories":12,"protein":0.4,"carbs":3,"fat":0.1,"fiber":0.5,"sugar":1.2,"sodium":0.001,"allergens_present":[],"iron_mg":0.2,"calcium_mg":5,"vitaminA_iu":1800,"benefit":"南瓜富含維他命A與纖維。","benefit_en":"Pumpkin is rich in vitamin A and fiber.","risk":"","risk_en":"","suitability":"excellent"}]}
 
 If the photo genuinely contains no food (e.g. blank wall, abstract image), return {"foods": []}.
 
@@ -148,11 +174,12 @@ Return ONLY the JSON object. No markdown fences, no prose, no explanation.`;
 async function identifyWithGemini(
   imageBase64: string,
   mimeType: string,
+  stage: LifeStageKey,
 ): Promise<GeminiPlateResponse> {
   const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
   if (!apiKey) throw new Error("GOOGLE_GEMINI_API_KEY not set");
 
-  const prompt = buildVisionPrompt();
+  const prompt = buildVisionPrompt(stage);
 
   const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
@@ -473,11 +500,11 @@ export async function POST(request: NextRequest) {
 
   // Log image size for debugging — base64 is ~1.37× the raw bytes.
   const imageSizeMB = (image.length * 0.75) / (1024 * 1024);
-  console.info(`[nutrition] image=${imageSizeMB.toFixed(1)}MB mime=${mimeType} bucket=${ageBucket}`);
+  console.info(`[nutrition] image=${imageSizeMB.toFixed(1)}MB mime=${mimeType} stage=${ageBucket}`);
 
   let gemini: GeminiPlateResponse;
   try {
-    gemini = await identifyWithGemini(image, mimeType);
+    gemini = await identifyWithGemini(image, mimeType, ageBucket);
   } catch (err) {
     // Log the full error server-side; never echo internals (env var names,
     // upstream API responses) to the client. Distinguish missing-key from
@@ -504,7 +531,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const foods: ResponseFoodItem[] = await Promise.all(
+  const rawFoods: ResponseFoodItem[] = await Promise.all(
     items.map(async (item) => {
       const resolved = await resolveNutrients(item);
       return {
@@ -524,6 +551,12 @@ export async function POST(request: NextRequest) {
       };
     }),
   );
+
+  // Apply hard food-caution rules for the user's life stage. This OVERRIDES
+  // Gemini's `suitability` for things like alcohol-during-pregnancy where
+  // medical guidance is non-negotiable. Infant buckets have no rules so
+  // the function is a no-op for them.
+  const foods = applyLifeStageCautions(rawFoods, ageBucket);
 
   return NextResponse.json({
     foods,

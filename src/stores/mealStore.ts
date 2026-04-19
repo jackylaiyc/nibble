@@ -28,6 +28,12 @@ export interface FoodItem {
     dha?: number;
     sodium?: number;
     sugar?: number;
+    // Maternal life-stage nutrients (populated only when food actually contains them).
+    folate?: number;
+    choline?: number;
+    iodine?: number;
+    caffeine?: number;
+    alcohol?: number;
   };
   allergensPresent?: AllergenKey[];
   /** Which data source provided the nutrients. */
@@ -67,6 +73,12 @@ export interface MealRecord {
     dha?: number;
     sodium?: number;
     sugar?: number;
+    // Maternal life-stage nutrients
+    folate?: number;
+    choline?: number;
+    iodine?: number;
+    caffeine?: number;
+    alcohol?: number;
   };
   date: string;              // "YYYY-MM-DD"
   time: string;              // "HH:MM"

@@ -1,24 +1,81 @@
 /**
- * Age bucket derivation from a child's date of birth.
+ * Life-stage derivation for the profiles Nibble tracks.
  *
- * Buckets match the RDA tables in `rdaTables.ts` and the WHO/AAP
- * feeding milestones. If a child falls outside 6mo-5yr we still return
- * a best-fit bucket so the app never crashes, but the UI should gate
- * on `isSupportedAge` before showing recommendations.
+ * The app supports three profile kinds — infants (6mo–5yr), pregnant women
+ * (by trimester), and breastfeeding women (0–6mo / 7+mo postpartum). Each
+ * maps to a `LifeStageKey` that serves as the lookup key into the RDA
+ * tables in `rdaTables.ts`.
+ *
+ * The legacy `AgeBucket` type (infant-only) is preserved as an alias of
+ * `LifeStageKey` so infant-focused call sites keep working unchanged.
  */
 
-export type AgeBucket =
+// ─── life-stage key (superset of the old AgeBucket) ────────────────────────
+
+/** Key used to look up RDA + priority nutrients + food cautions. */
+export type LifeStageKey =
+  // Infant / toddler — unchanged from the old AgeBucket values.
   | "6-8mo"
   | "9-11mo"
   | "12-23mo"
   | "24-47mo"
-  | "48mo+";
+  | "48mo+"
+  // Pregnancy by trimester.
+  | "pregnant-T1"
+  | "pregnant-T2"
+  | "pregnant-T3"
+  // Breastfeeding by phase. 0–6mo has a larger calorie bump; 7+mo drops off.
+  | "lactation-0-6mo"
+  | "lactation-7+mo";
+
+/** Back-compat alias — existing infant code imports `AgeBucket`. */
+export type AgeBucket = LifeStageKey;
+
+// ─── life-stage discriminated union ────────────────────────────────────────
+
+/** Minimal input shape — mirrors the fields we care about on `Child`. Decoupled
+ *  from the store to avoid circular imports. */
+export interface LifeStageInput {
+  kind?: "infant" | "pregnant" | "breastfeeding";
+  /** Required when kind is "infant" (or missing, defaults to infant). */
+  dob?: string;
+  /** Required when kind is "pregnant". ISO YYYY-MM-DD. */
+  pregnancyDueDate?: string;
+  /** Required when kind is "breastfeeding". ISO YYYY-MM-DD. */
+  breastfeedingStartDate?: string;
+}
+
+export type LifeStage =
+  | {
+      kind: "infant";
+      key: "6-8mo" | "9-11mo" | "12-23mo" | "24-47mo" | "48mo+";
+      months: number;
+      years: number;
+      displayShort: string; // "9mo", "2y 3m"
+      isSupportedAge: boolean;
+    }
+  | {
+      kind: "pregnant";
+      key: "pregnant-T1" | "pregnant-T2" | "pregnant-T3";
+      weeksPregnant: number;
+      trimester: 1 | 2 | 3;
+      displayShort: string; // "26 weeks", "T2"
+    }
+  | {
+      kind: "breastfeeding";
+      key: "lactation-0-6mo" | "lactation-7+mo";
+      weeksPostpartum: number;
+      monthsPostpartum: number;
+      displayShort: string; // "5 months postpartum"
+    };
+
+// ─── infant helpers (existing) ─────────────────────────────────────────────
 
 export interface AgeInfo {
   bucket: AgeBucket;
   months: number;
   years: number;
-  displayShort: string; // "9mo", "2y 3m"
+  displayShort: string;
   isSupportedAge: boolean;
 }
 
@@ -55,10 +112,111 @@ export function ageInfoFromDob(dob: string | Date, now: Date = new Date()): AgeI
   };
 }
 
+// ─── pregnancy helpers ─────────────────────────────────────────────────────
+
+/**
+ * Weeks pregnant given a due date. Standard obstetric convention: a
+ * full-term pregnancy is 40 weeks. We count backward from the due date.
+ */
+export function weeksPregnantFromDueDate(dueDate: string | Date, now: Date = new Date()): number {
+  const due = typeof dueDate === "string" ? new Date(dueDate) : dueDate;
+  const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+  const weeksRemaining = (due.getTime() - now.getTime()) / msPerWeek;
+  const weeks = 40 - weeksRemaining;
+  // Clamp to a sane range. Outside-range callers should flag isSupportedAge.
+  return Math.max(0, Math.min(45, Math.round(weeks)));
+}
+
+export function trimesterFromWeeks(weeks: number): 1 | 2 | 3 {
+  if (weeks <= 13) return 1;
+  if (weeks <= 27) return 2;
+  return 3;
+}
+
+// ─── breastfeeding helpers ─────────────────────────────────────────────────
+
+export function weeksPostpartumFromStart(start: string | Date, now: Date = new Date()): number {
+  const s = typeof start === "string" ? new Date(start) : start;
+  const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+  const weeks = (now.getTime() - s.getTime()) / msPerWeek;
+  return Math.max(0, Math.round(weeks));
+}
+
+// ─── unified life-stage resolver ───────────────────────────────────────────
+
+/**
+ * Derive the current `LifeStage` for a profile. Kind discriminator on the
+ * profile picks the branch; missing `kind` defaults to "infant" for back-
+ * compat with records created before the expansion.
+ *
+ * Returns a best-effort `LifeStage` even for inputs that are slightly
+ * malformed (e.g. a missing due date). Callers gate UI via `isSupportedAge`
+ * (infants only) or the trimester / week counters themselves.
+ */
+export function getLifeStage(input: LifeStageInput, now: Date = new Date()): LifeStage {
+  const kind = input.kind ?? "infant";
+
+  if (kind === "pregnant") {
+    const weeks = input.pregnancyDueDate
+      ? weeksPregnantFromDueDate(input.pregnancyDueDate, now)
+      : 20; // safe middle default
+    const trimester = trimesterFromWeeks(weeks);
+    const key =
+      trimester === 1 ? "pregnant-T1" : trimester === 2 ? "pregnant-T2" : "pregnant-T3";
+    return {
+      kind: "pregnant",
+      key,
+      weeksPregnant: weeks,
+      trimester,
+      displayShort: `T${trimester} · ${weeks}w`,
+    };
+  }
+
+  if (kind === "breastfeeding") {
+    const weeks = input.breastfeedingStartDate
+      ? weeksPostpartumFromStart(input.breastfeedingStartDate, now)
+      : 8;
+    const months = Math.floor(weeks / 4.345);
+    const key: "lactation-0-6mo" | "lactation-7+mo" =
+      months < 7 ? "lactation-0-6mo" : "lactation-7+mo";
+    return {
+      kind: "breastfeeding",
+      key,
+      weeksPostpartum: weeks,
+      monthsPostpartum: months,
+      displayShort: `${months}mo postpartum`,
+    };
+  }
+
+  // Infant (default)
+  const info = ageInfoFromDob(input.dob ?? new Date().toISOString(), now);
+  return {
+    kind: "infant",
+    key: info.bucket as LifeStage extends { kind: "infant" } ? LifeStage["key"] : never,
+    months: info.months,
+    years: info.years,
+    displayShort: info.displayShort,
+    isSupportedAge: info.isSupportedAge,
+  };
+}
+
+// ─── labels ────────────────────────────────────────────────────────────────
+
 export const AGE_BUCKET_LABELS: Record<AgeBucket, { en: string; "zh-TW": string }> = {
+  // Infant / toddler
   "6-8mo": { en: "6–8 months", "zh-TW": "6–8 個月" },
   "9-11mo": { en: "9–11 months", "zh-TW": "9–11 個月" },
   "12-23mo": { en: "12–23 months", "zh-TW": "1–2 歲" },
   "24-47mo": { en: "2–4 years", "zh-TW": "2–4 歲" },
   "48mo+": { en: "4+ years", "zh-TW": "4 歲以上" },
+  // Pregnancy
+  "pregnant-T1": { en: "Pregnant · 1st trimester", "zh-TW": "懷孕 · 第一孕期" },
+  "pregnant-T2": { en: "Pregnant · 2nd trimester", "zh-TW": "懷孕 · 第二孕期" },
+  "pregnant-T3": { en: "Pregnant · 3rd trimester", "zh-TW": "懷孕 · 第三孕期" },
+  // Breastfeeding
+  "lactation-0-6mo": { en: "Breastfeeding · 0–6 months", "zh-TW": "哺乳 · 產後 0–6 個月" },
+  "lactation-7+mo": { en: "Breastfeeding · 7+ months", "zh-TW": "哺乳 · 產後 7 個月以上" },
 };
+
+/** Alias for downstream consumers that want a life-stage-neutral name. */
+export const LIFE_STAGE_LABELS = AGE_BUCKET_LABELS;

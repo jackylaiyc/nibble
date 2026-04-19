@@ -890,21 +890,25 @@ function PerFoodCard({
 
   // Walk every tracked nutrient, compute its share of the daily target,
   // sort priority-aware so iron/zinc/calcium win ties even at small contributions.
+  // RDA rows are Partial since not every nutrient applies to every life stage —
+  // skip nutrients the current stage doesn't track.
   const rows = (Object.keys(targets) as Nutrient[])
     .map((n) => {
+      const t = targets[n];
+      if (!t) return null;
       const actual = nutrients[n] ?? 0;
-      const target = targets[n].value;
-      const coverage = target > 0 ? actual / target : 0;
+      const coverage = t.value > 0 ? actual / t.value : 0;
       return {
         nutrient: n,
         actual,
-        target,
+        target: t.value,
         coverage,
-        unit: targets[n].unit,
-        isUpperLimit: !!targets[n].isUpperLimit,
+        unit: t.unit,
+        isUpperLimit: !!t.isUpperLimit,
         priority: priorityNutrients.includes(n),
       };
     })
+    .filter((r): r is NonNullable<typeof r> => r !== null)
     .filter((r) => r.actual > 0 && r.coverage >= 0.01)
     .sort((a, b) => {
       if (a.priority !== b.priority) return a.priority ? -1 : 1;

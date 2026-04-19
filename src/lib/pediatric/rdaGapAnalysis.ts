@@ -9,23 +9,20 @@
 import type { AgeBucket } from "./ageBucket";
 import { RDA, type Nutrient, type RdaTarget } from "./rdaTables";
 
-/** A simplified totals view that sums the nutrient fields present on any meal. */
-export interface NutrientTotals {
-  calories?: number;
-  protein?: number;
-  fat?: number;
-  carbs?: number;
-  fiber?: number;
-  iron?: number;
-  zinc?: number;
-  calcium?: number;
-  vitaminD?: number;
-  vitaminA?: number;
-  vitaminC?: number;
-  dha?: number;
-  sodium?: number;
-  sugar?: number;
-}
+/**
+ * A simplified totals view that sums the nutrient fields present on any meal.
+ * Derived from the `Nutrient` union so adding a new nutrient auto-widens this
+ * type; callers treat absent fields as "not tracked for this meal/stage".
+ */
+export type NutrientTotals = Partial<Record<Nutrient, number>>;
+
+// Explicit list of keys to iterate when summing — keeps `sumMeals` cheap.
+const NUTRIENT_KEY_LIST: Nutrient[] = [
+  "calories", "protein", "fat", "carbs", "fiber",
+  "iron", "zinc", "calcium", "vitaminD", "vitaminA",
+  "vitaminC", "dha", "sodium", "sugar",
+  "folate", "choline", "iodine", "caffeine", "alcohol",
+];
 
 export interface CoverageCell {
   nutrient: Nutrient;
@@ -38,12 +35,7 @@ export interface CoverageCell {
 
 export function sumMeals(meals: NutrientTotals[]): NutrientTotals {
   const sum: NutrientTotals = {};
-  const keys: (keyof NutrientTotals)[] = [
-    "calories", "protein", "fat", "carbs", "fiber",
-    "iron", "zinc", "calcium", "vitaminD", "vitaminA",
-    "vitaminC", "dha", "sodium", "sugar",
-  ];
-  for (const k of keys) {
+  for (const k of NUTRIENT_KEY_LIST) {
     let total = 0;
     let anySet = false;
     for (const meal of meals) {
@@ -64,8 +56,10 @@ export function computeCoverage(
 ): CoverageCell[] {
   const targets = RDA[bucket];
   const cells: CoverageCell[] = [];
+  // Only iterate nutrients this life stage tracks. Absent keys are skipped.
   (Object.keys(targets) as Nutrient[]).forEach((nutrient) => {
     const target = targets[nutrient];
+    if (!target) return; // shouldn't happen given Object.keys source, but belt-and-braces for Partial rows
     const actual = totals[nutrient];
     if (typeof actual !== "number") {
       cells.push({
