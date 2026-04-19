@@ -7,7 +7,7 @@ import { useChildProfileStore } from "@/stores/childProfileStore";
 import { useMealStore, type FoodItem, type PortionUnit } from "@/stores/mealStore";
 import { useScanIntakeStore } from "@/stores/scanIntakeStore";
 import { sumFoodTotals } from "@/lib/nutrition/sumFoodTotals";
-import { ageInfoFromDob, type AgeBucket } from "@/lib/pediatric/ageBucket";
+import { getLifeStage, type AgeBucket } from "@/lib/pediatric/ageBucket";
 import {
   getAllergen,
   type AllergenKey,
@@ -236,7 +236,7 @@ export default function ScanPage() {
         imageBase64 = await fileToBase64(file);
         mimeType = file.type;
       }
-      const bucket = ageInfoFromDob(activeChild.dob).bucket;
+      const bucket = getLifeStage(activeChild).key;
       const res = await fetch("/api/ai/nutrition", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -290,7 +290,7 @@ export default function ScanPage() {
 
   function save() {
     if (!result || !activeChild) return;
-    const bucket = ageInfoFromDob(activeChild.dob).bucket;
+    const bucket = getLifeStage(activeChild).key;
     const derivedMealType = deriveMealType(mealTime);
     addMeal({
       childId: activeChild.id,
@@ -342,7 +342,7 @@ export default function ScanPage() {
 
   const coverage = useMemo(() => {
     if (!result || !activeChild) return [];
-    const b = ageInfoFromDob(activeChild.dob).bucket;
+    const b = getLifeStage(activeChild).key;
     return computeCoverage(result.totals, b);
   }, [result, activeChild]);
 
@@ -355,7 +355,7 @@ export default function ScanPage() {
   // Daily accumulated totals (previous meals today + this scan)
   const dailyCoverage = useMemo(() => {
     if (!result || !activeChild) return [];
-    const bucket = ageInfoFromDob(activeChild.dob).bucket;
+    const bucket = getLifeStage(activeChild).key;
     const todayMeals = getMealsForDate(activeChild.id, new Date());
     const previousTotals = todayMeals.map((m) => m.totals);
     const combined = sumMeals([...previousTotals, result.totals]);
@@ -398,7 +398,7 @@ export default function ScanPage() {
     );
   }
 
-  const bucket = ageInfoFromDob(activeChild.dob).bucket;
+  const bucket = getLifeStage(activeChild).key;
   const priorityNutrients = PRIORITY_NUTRIENTS[bucket];
 
   return (
@@ -698,7 +698,7 @@ export default function ScanPage() {
                   filename="nibble-plate.png"
                   params={{
                     childName: activeChild.name,
-                    ageText: ageInfoFromDob(activeChild.dob).displayShort,
+                    ageText: getLifeStage(activeChild).displayShort,
                     nutrients: JSON.stringify(
                       priorityNutrients.slice(0, 4).map((n) => [
                         n,

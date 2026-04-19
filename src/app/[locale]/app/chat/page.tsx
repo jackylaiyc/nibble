@@ -14,7 +14,7 @@ import {
 } from "@/stores/chatStore";
 import { limitsFor } from "@/lib/pricing/plans";
 import { PaywallModal } from "@/components/paywall/PaywallModal";
-import { ageInfoFromDob } from "@/lib/pediatric/ageBucket";
+import { getLifeStage } from "@/lib/pediatric/ageBucket";
 
 /**
  * Ask Nibble — the conversational half of the hero pair (scan + chat).
@@ -144,7 +144,7 @@ export default function ChatPage() {
     setError(null);
 
     try {
-      const bucket = ageInfoFromDob(activeChild.dob).bucket;
+      const bucket = getLifeStage(activeChild).key;
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

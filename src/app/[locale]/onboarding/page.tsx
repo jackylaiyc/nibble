@@ -3,10 +3,17 @@
 import { useMemo, useState, useEffect } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
-import { useChildProfileStore, type FeedingStyle } from "@/stores/childProfileStore";
+import {
+  useChildProfileStore,
+  type FeedingStyle,
+  type ProfileKind,
+} from "@/stores/childProfileStore";
 import {
   AGE_BUCKET_LABELS,
   ageInfoFromDob,
+  weeksPregnantFromDueDate,
+  trimesterFromWeeks,
+  weeksPostpartumFromStart,
 } from "@/lib/pediatric/ageBucket";
 import {
   ALLERGENS,
@@ -31,11 +38,11 @@ import {
  * the flow works end-to-end without a logged-in user.
  */
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 0 | 1 | 2 | 3 | 4 | 5;
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;          // Step 0 (kind picker) + Steps 1-5
 
-const AVATAR_CHOICES = ["🍎", "🍑", "🍐", "🥑", "🥕", "🫐", "🌸", "🐻", "🦊", "🐣"] as const;
+const AVATAR_CHOICES = ["🍎", "🍑", "🍐", "🥑", "🥕", "🫐", "🌸", "🐻", "🦊", "🐣", "🤰", "🤱"] as const;
 
 type Sex = "female" | "male" | "unspecified";
 
@@ -53,12 +60,17 @@ export default function OnboardingPage() {
     loadFromStorage();
   }, [loadFromStorage]);
 
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState<Step>(0);
+
+  // ─── New: profile kind discriminator ────────────────────────────────────
+  const [kind, setKind] = useState<ProfileKind>("infant");
+  const [pregnancyDueDate, setPregnancyDueDate] = useState<string>("");
+  const [breastfeedingStartDate, setBreastfeedingStartDate] = useState<string>("");
 
   const [name, setName] = useState("");
   const [sex, setSex] = useState<Sex>("unspecified");
   const [avatar, setAvatar] = useState<string>(AVATAR_CHOICES[0]);
-  const [dob, setDob] = useState<string>(""); // YYYY-MM-DD
+  const [dob, setDob] = useState<string>(""); // YYYY-MM-DD (infant only)
   const [feedingStyle, setFeedingStyle] = useState<FeedingStyle>("mixed");
   const [allergens, setAllergens] = useState<AllergenKey[]>([]);
   const [noneKnown, setNoneKnown] = useState(false);
@@ -67,12 +79,34 @@ export default function OnboardingPage() {
 
   const ageInfo = useMemo(() => (dob ? ageInfoFromDob(dob) : null), [dob]);
 
-  // Per-step gate for the Next button.
+  // Pregnancy / breastfeeding live previews so the user sees their derived
+  // trimester / weeks-postpartum the moment they pick a date.
+  const pregnancyPreview = useMemo(() => {
+    if (kind !== "pregnant" || !pregnancyDueDate) return null;
+    const w = weeksPregnantFromDueDate(pregnancyDueDate);
+    return { weeks: w, trimester: trimesterFromWeeks(w) };
+  }, [kind, pregnancyDueDate]);
+
+  const lactationPreview = useMemo(() => {
+    if (kind !== "breastfeeding" || !breastfeedingStartDate) return null;
+    const w = weeksPostpartumFromStart(breastfeedingStartDate);
+    return { weeks: w, months: Math.floor(w / 4.345) };
+  }, [kind, breastfeedingStartDate]);
+
+  // Per-step gate for the Next button. Step 2's gate branches on the
+  // selected kind because each kind asks for a different date.
   const canAdvance: Record<Step, boolean> = {
+    0: !!kind,
     1: name.trim().length > 0,
-    2: !!dob && !Number.isNaN(new Date(dob).getTime()),
-    3: !!feedingStyle,
-    4: true, // allergens always optional
+    2:
+      kind === "infant"
+        ? !!dob && !Number.isNaN(new Date(dob).getTime())
+        : kind === "pregnant"
+          ? !!pregnancyDueDate && !Number.isNaN(new Date(pregnancyDueDate).getTime())
+          : !!breastfeedingStartDate &&
+            !Number.isNaN(new Date(breastfeedingStartDate).getTime()),
+    3: !!feedingStyle, // only reached for infants
+    4: true,
     5: consent,
   };
 
@@ -90,32 +124,57 @@ export default function OnboardingPage() {
 
   function next() {
     if (!canAdvance[step]) return;
-    if (step < TOTAL_STEPS) {
-      setStep((s) => (s + 1) as Step);
-    } else {
-      finish();
+    // Skip Step 3 (feeding style) for non-infant kinds — those users don't
+    // have a feeding-style choice to make; jump straight to allergens.
+    if (step === 2 && kind !== "infant") {
+      setStep(4);
+      return;
     }
+    if (step === 5) {
+      finish();
+      return;
+    }
+    setStep((s) => (s + 1) as Step);
   }
 
   function back() {
-    if (step > 1) setStep((s) => (s - 1) as Step);
+    if (step === 0) return;
+    // Mirror the skip in reverse: from Step 4 for non-infants, back to 2.
+    if (step === 4 && kind !== "infant") {
+      setStep(2);
+      return;
+    }
+    setStep((s) => (s - 1) as Step);
   }
 
   async function finish() {
     if (!consent || saving) return;
     setSaving(true);
+
+    // For non-infant profiles `dob` is unused downstream but must be a valid
+    // ISO string (the Child interface requires it). Store today to keep the
+    // field stable and non-breaking for any legacy code that still reads it.
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const storedDob =
+      kind === "infant"
+        ? dob
+        : kind === "breastfeeding"
+          ? breastfeedingStartDate || todayIso
+          : todayIso;
+
     const newId = addChild({
       name: name.trim(),
-      dob,
-      sex,
+      kind,
+      dob: storedDob,
+      sex: kind === "infant" ? sex : undefined,
       avatar,
-      feedingStyle,
+      feedingStyle: kind === "infant" ? feedingStyle : undefined,
+      pregnancyDueDate: kind === "pregnant" ? pregnancyDueDate : undefined,
+      breastfeedingStartDate:
+        kind === "breastfeeding" ? breastfeedingStartDate : undefined,
       allergens: noneKnown ? [] : allergens,
       notes: "",
     });
-    // Onboarding always lands the caregiver on the just-added child —
-    // otherwise siblings added after the first one stay invisible because
-    // addChild preserves the previous activeChildId.
     setActiveChild(newId);
     router.push("/app");
   }
@@ -125,6 +184,24 @@ export default function OnboardingPage() {
       <ProgressBar step={step} />
 
       <div className="flex-1 flex flex-col px-6 pt-8 pb-36 max-w-xl mx-auto w-full">
+        {step === 0 && (
+          <Step0KindPicker
+            locale={locale}
+            kind={kind}
+            setKind={(k) => {
+              setKind(k);
+              // Reset kind-specific fields so stale values can't leak.
+              setDob("");
+              setPregnancyDueDate("");
+              setBreastfeedingStartDate("");
+              // Switch to a kind-appropriate default avatar if still on the
+              // first apple — keeps the chosen kind visible at a glance.
+              if (avatar === AVATAR_CHOICES[0]) {
+                setAvatar(k === "pregnant" ? "🤰" : k === "breastfeeding" ? "🤱" : "🍎");
+              }
+            }}
+          />
+        )}
         {step === 1 && (
           <Step1NameSex
             t={t}
@@ -134,9 +211,10 @@ export default function OnboardingPage() {
             setSex={setSex}
             avatar={avatar}
             setAvatar={setAvatar}
+            kind={kind}
           />
         )}
-        {step === 2 && (
+        {step === 2 && kind === "infant" && (
           <Step2Dob
             t={t}
             locale={locale}
@@ -145,7 +223,23 @@ export default function OnboardingPage() {
             ageInfo={ageInfo}
           />
         )}
-        {step === 3 && (
+        {step === 2 && kind === "pregnant" && (
+          <Step2PregnancyDueDate
+            locale={locale}
+            dueDate={pregnancyDueDate}
+            setDueDate={setPregnancyDueDate}
+            preview={pregnancyPreview}
+          />
+        )}
+        {step === 2 && kind === "breastfeeding" && (
+          <Step2LactationStart
+            locale={locale}
+            startDate={breastfeedingStartDate}
+            setStartDate={setBreastfeedingStartDate}
+            preview={lactationPreview}
+          />
+        )}
+        {step === 3 && kind === "infant" && (
           <Step3FeedingStyle
             t={t}
             feedingStyle={feedingStyle}
@@ -170,7 +264,7 @@ export default function OnboardingPage() {
       {/* Sticky footer nav */}
       <nav className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-border px-6 py-4">
         <div className="max-w-xl mx-auto flex items-center gap-3">
-          {step > 1 ? (
+          {step > 0 ? (
             <button
               onClick={back}
               className="flex-shrink-0 px-5 py-3 rounded-full text-ink-soft font-medium hover:text-ink transition"
@@ -188,7 +282,7 @@ export default function OnboardingPage() {
           >
             {saving
               ? t("saving")
-              : step === TOTAL_STEPS
+              : step === 5
                 ? t("finish")
                 : tCommon("next")}
           </button>
@@ -201,7 +295,9 @@ export default function OnboardingPage() {
 // ─── Progress bar ─────────────────────────────────────────────────────────
 
 function ProgressBar({ step }: { step: Step }) {
-  const pct = (step / TOTAL_STEPS) * 100;
+  // User-facing step number is 1-based: Step 0 (kind picker) displays as "1 / 6".
+  const displayStep = step + 1;
+  const pct = (displayStep / TOTAL_STEPS) * 100;
   return (
     <div className="sticky top-0 z-20 bg-cream/90 backdrop-blur-md border-b border-border px-6 pt-5 pb-4">
       <div className="max-w-xl mx-auto">
@@ -210,7 +306,7 @@ function ProgressBar({ step }: { step: Step }) {
             🍎 Nibble
           </span>
           <span className="text-xs text-ink-faded tabular-nums">
-            {step} / {TOTAL_STEPS}
+            {displayStep} / {TOTAL_STEPS}
           </span>
         </div>
         <div className="h-1.5 bg-border rounded-full overflow-hidden">
@@ -234,6 +330,7 @@ function Step1NameSex({
   setSex,
   avatar,
   setAvatar,
+  kind,
 }: {
   t: ReturnType<typeof useTranslations<"Onboarding">>;
   name: string;
@@ -242,6 +339,7 @@ function Step1NameSex({
   setSex: (s: Sex) => void;
   avatar: string;
   setAvatar: (s: string) => void;
+  kind: ProfileKind;
 }) {
   return (
     <div className="space-y-8">
@@ -288,32 +386,34 @@ function Step1NameSex({
         </div>
       </div>
 
-      <div>
-        <span className="block text-sm font-medium text-ink mb-2">
-          {t("sexLabel")}
-        </span>
-        <div className="grid grid-cols-3 gap-2">
-          {(["female", "male", "unspecified"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSex(s)}
-              className={`px-4 py-3 rounded-card text-sm font-medium transition-all duration-200 ${
-                sex === s
-                  ? "bg-sage/40 ring-2 ring-sage-deep text-ink"
-                  : "bg-white border border-border text-ink-soft hover:border-sage-deep"
-              }`}
-            >
-              {s === "female"
-                ? t("sexFemale")
-                : s === "male"
-                  ? t("sexMale")
-                  : t("sexUnspecified")}
-            </button>
-          ))}
+      {kind === "infant" && (
+        <div>
+          <span className="block text-sm font-medium text-ink mb-2">
+            {t("sexLabel")}
+          </span>
+          <div className="grid grid-cols-3 gap-2">
+            {(["female", "male", "unspecified"] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setSex(s)}
+                className={`px-4 py-3 rounded-card text-sm font-medium transition-all duration-200 ${
+                  sex === s
+                    ? "bg-sage/40 ring-2 ring-sage-deep text-ink"
+                    : "bg-white border border-border text-ink-soft hover:border-sage-deep"
+                }`}
+              >
+                {s === "female"
+                  ? t("sexFemale")
+                  : s === "male"
+                    ? t("sexMale")
+                    : t("sexUnspecified")}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-ink-faded">{t("sexHint")}</p>
         </div>
-        <p className="mt-2 text-xs text-ink-faded">{t("sexHint")}</p>
-      </div>
+      )}
     </div>
   );
 }
@@ -613,5 +713,228 @@ function StepHeader({ title, sub }: { title: string; sub: string }) {
       </h1>
       <p className="mt-2 text-base text-ink-soft leading-relaxed">{sub}</p>
     </header>
+  );
+}
+
+// ─── Step 0: profile kind picker ──────────────────────────────────────────
+// First step of the onboarding flow. Determines which RDA table, food-caution
+// rules, and subsequent steps the rest of the flow uses.
+
+function Step0KindPicker({
+  locale,
+  kind,
+  setKind,
+}: {
+  locale: "zh-TW" | "en";
+  kind: ProfileKind;
+  setKind: (k: ProfileKind) => void;
+}) {
+  const L = (en: string, zh: string) => (locale === "en" ? en : zh);
+  const choices: Array<{
+    key: ProfileKind;
+    emoji: string;
+    titleEn: string;
+    titleZh: string;
+    subEn: string;
+    subZh: string;
+  }> = [
+    {
+      key: "infant",
+      emoji: "👶",
+      titleEn: "A baby or toddler",
+      titleZh: "寶寶或幼兒",
+      subEn: "6 months to 4 years old. Track iron, zinc, DHA & more.",
+      subZh: "6 個月到 4 歲，追蹤鐵、鋅、DHA 等關鍵營養。",
+    },
+    {
+      key: "pregnant",
+      emoji: "🤰",
+      titleEn: "I'm pregnant",
+      titleZh: "我正在懷孕",
+      subEn: "Track folate, iron, DHA. Flag alcohol, raw fish & high-caffeine.",
+      subZh: "追蹤葉酸、鐵、DHA，提醒避免酒精、生食與過量咖啡因。",
+    },
+    {
+      key: "breastfeeding",
+      emoji: "🤱",
+      titleEn: "I'm breastfeeding",
+      titleZh: "我正在哺乳",
+      subEn: "Track iodine, DHA, calcium. Mind caffeine & timing of alcohol.",
+      subZh: "追蹤碘、DHA、鈣，留意咖啡因與哺乳前的酒精。",
+    },
+  ];
+  return (
+    <div className="space-y-6">
+      <StepHeader
+        title={L("Who are we tracking?", "要追蹤誰的營養？")}
+        sub={L(
+          "Nibble tailors nutrient targets and food cautions to who you're tracking.",
+          "Nibble 會依照對象調整每日營養目標與食物注意事項。",
+        )}
+      />
+      <div className="space-y-3">
+        {choices.map((c) => {
+          const selected = kind === c.key;
+          return (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setKind(c.key)}
+              className={`w-full text-left flex items-start gap-4 p-5 rounded-card transition-all duration-200 ${
+                selected
+                  ? "bg-peach/30 ring-2 ring-peach-deep"
+                  : "bg-white border border-border hover:border-peach-deep"
+              }`}
+            >
+              <div className="text-3xl flex-shrink-0">{c.emoji}</div>
+              <div className="flex-1">
+                <p className="font-display font-semibold text-ink">
+                  {locale === "en" ? c.titleEn : c.titleZh}
+                </p>
+                <p className="mt-1 text-sm text-ink-soft leading-relaxed">
+                  {locale === "en" ? c.subEn : c.subZh}
+                </p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Step 2 variant: pregnancy due date ───────────────────────────────────
+
+function Step2PregnancyDueDate({
+  locale,
+  dueDate,
+  setDueDate,
+  preview,
+}: {
+  locale: "zh-TW" | "en";
+  dueDate: string;
+  setDueDate: (s: string) => void;
+  preview: { weeks: number; trimester: 1 | 2 | 3 } | null;
+}) {
+  const L = (en: string, zh: string) => (locale === "en" ? en : zh);
+  // Due date must be in the future but within ~10 months.
+  const todayDate = new Date();
+  const today = todayDate.toISOString().slice(0, 10);
+  const maxDate = new Date(todayDate);
+  maxDate.setMonth(maxDate.getMonth() + 10);
+  const max = maxDate.toISOString().slice(0, 10);
+  return (
+    <div className="space-y-8">
+      <StepHeader
+        title={L("When's your due date?", "預產期是什麼時候？")}
+        sub={L(
+          "We use the standard 40-week convention to estimate your current trimester — not a medical prediction.",
+          "我們用標準的 40 週懷孕週期計算目前孕期，僅供參考，非醫療預測。",
+        )}
+      />
+      <div>
+        <label
+          htmlFor="pregnancy-due-date"
+          className="block text-sm font-medium text-ink mb-2"
+        >
+          {L("Estimated due date", "預產期")}
+        </label>
+        <input
+          id="pregnancy-due-date"
+          type="date"
+          value={dueDate}
+          min={today}
+          max={max}
+          onChange={(e) => setDueDate(e.target.value)}
+          className="w-full px-5 py-4 rounded-card bg-white border border-border text-lg focus:outline-none focus:ring-2 focus:ring-peach-deep/40 focus:border-peach-deep transition"
+        />
+      </div>
+      {preview && (
+        <div className="rounded-card bg-sage/20 border border-sage/40 p-5">
+          <p className="text-sm font-medium text-sage-deep">
+            {L(
+              `You're about ${preview.weeks} weeks pregnant.`,
+              `您目前約懷孕 ${preview.weeks} 週。`,
+            )}
+          </p>
+          <p className="mt-1 text-lg font-display font-semibold text-ink">
+            {L(
+              `Trimester ${preview.trimester}`,
+              `第 ${preview.trimester === 1 ? "一" : preview.trimester === 2 ? "二" : "三"} 孕期`,
+            )}
+          </p>
+          <p className="mt-2 text-xs text-ink-faded">
+            {L(
+              "Daily targets adjust each trimester — you'll see updated rings the moment you log your first meal.",
+              "每個孕期的營養目標會自動調整，您記錄第一餐時就會看到更新後的指標。",
+            )}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Step 2 variant: breastfeeding start date ─────────────────────────────
+
+function Step2LactationStart({
+  locale,
+  startDate,
+  setStartDate,
+  preview,
+}: {
+  locale: "zh-TW" | "en";
+  startDate: string;
+  setStartDate: (s: string) => void;
+  preview: { weeks: number; months: number } | null;
+}) {
+  const L = (en: string, zh: string) => (locale === "en" ? en : zh);
+  // Start date must be in the past within the last ~2 years (cover extended BF).
+  const today = new Date().toISOString().slice(0, 10);
+  const minDate = new Date();
+  minDate.setFullYear(minDate.getFullYear() - 2);
+  const min = minDate.toISOString().slice(0, 10);
+  return (
+    <div className="space-y-8">
+      <StepHeader
+        title={L("When did you start breastfeeding?", "開始哺乳的日期？")}
+        sub={L(
+          "Usually your baby's birthday. We use this to calculate your nutrient needs — they're highest in the first 6 months.",
+          "通常是寶寶的出生日。我們用這個日期計算每日營養需求，前 6 個月需求最高。",
+        )}
+      />
+      <div>
+        <label
+          htmlFor="lactation-start"
+          className="block text-sm font-medium text-ink mb-2"
+        >
+          {L("Breastfeeding start date", "哺乳開始日期")}
+        </label>
+        <input
+          id="lactation-start"
+          type="date"
+          value={startDate}
+          min={min}
+          max={today}
+          onChange={(e) => setStartDate(e.target.value)}
+          className="w-full px-5 py-4 rounded-card bg-white border border-border text-lg focus:outline-none focus:ring-2 focus:ring-peach-deep/40 focus:border-peach-deep transition"
+        />
+      </div>
+      {preview && (
+        <div className="rounded-card bg-sage/20 border border-sage/40 p-5">
+          <p className="text-sm font-medium text-sage-deep">
+            {L(
+              `${preview.months} months postpartum (${preview.weeks} weeks).`,
+              `產後 ${preview.months} 個月（${preview.weeks} 週）。`,
+            )}
+          </p>
+          <p className="mt-1 text-lg font-display font-semibold text-ink">
+            {preview.months < 7
+              ? L("0-6 month phase — higher calorie needs", "0-6 個月階段 — 熱量需求較高")
+              : L("7+ month phase", "7 個月以上階段")}
+          </p>
+        </div>
+      )}
+    </div>
   );
 }

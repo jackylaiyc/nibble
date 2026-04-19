@@ -5,7 +5,7 @@ import { useLocale } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
 import { useMealStore } from "@/stores/mealStore";
-import { ageInfoFromDob } from "@/lib/pediatric/ageBucket";
+import { getLifeStage } from "@/lib/pediatric/ageBucket";
 import {
   PRIORITY_NUTRIENTS,
   NUTRIENT_LABELS,
@@ -21,6 +21,7 @@ import { RDARing } from "@/components/pediatric/RDARing";
 import { DailySummaryCard } from "@/components/nutrition/DailySummaryCard";
 import { RecentFoodsStrip } from "@/components/nutrition/RecentFoodsStrip";
 import { ScanSourceSheet } from "@/components/scan/ScanSourceSheet";
+import { ProfileSwitcher } from "@/components/layout/ProfileSwitcher";
 import { buildRecentFoods } from "@/lib/nutrition/recentFoods";
 import {
   fireLocalNotification,
@@ -122,7 +123,7 @@ export default function AppDashboard() {
     if (!activeChild || todayMeals.length === 0) {
       return { dailyCoverage: [], gapSummary: null };
     }
-    const bucket = ageInfoFromDob(activeChild.dob).bucket;
+    const bucket = getLifeStage(activeChild).key;
     const totals = sumMeals(todayMeals.map((m) => m.totals));
     const cov = computeCoverage(totals, bucket);
 
@@ -150,7 +151,7 @@ export default function AppDashboard() {
     if (!y || !m || !d) return null;
     const targetMeals = getMealsForDate(activeChild.id, new Date(y, m - 1, d));
     if (targetMeals.length === 0) return null;
-    const bucket = ageInfoFromDob(activeChild.dob).bucket;
+    const bucket = getLifeStage(activeChild).key;
     return buildDailySummary(targetMeals, bucket);
   }, [activeChild, summaryDate, getMealsForDate]);
 
@@ -191,22 +192,23 @@ export default function AppDashboard() {
 
   if (!activeChild) return null; // redirect in effect
 
-  const ageInfo = ageInfoFromDob(activeChild.dob);
-  const bucket = ageInfo.bucket;
+  // Life-stage-aware display: for infants shows "9mo" / "2y 3m", for
+  // pregnant shows "T2 · 26w", for breastfeeding shows "5mo postpartum".
+  const lifeStage = getLifeStage(activeChild);
+  const bucket = lifeStage.key;
   const priorityNutrients = PRIORITY_NUTRIENTS[bucket];
 
   return (
     <main className="min-h-screen bg-cream pb-28">
       <div className="max-w-xl mx-auto px-5 pt-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <span className="text-3xl">{activeChild.avatar || "🍎"}</span>
-          <div className="flex-1 min-w-0">
-            <h1 className="font-display font-bold text-ink text-lg">
-              {activeChild.name}
-            </h1>
-            <p className="text-sm text-ink-faded">{ageInfo.displayShort}</p>
-          </div>
+        {/* Header — profile switcher replaces the static avatar/name so users
+            can flip between their own pregnancy profile and a child's, or add
+            another profile entirely. */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <ProfileSwitcher locale={locale} />
+          <p className="text-sm text-ink-faded truncate flex-1 min-w-0">
+            {lifeStage.displayShort}
+          </p>
           {notifState === "default" && (
             <button
               type="button"
