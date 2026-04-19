@@ -232,9 +232,15 @@ export default function AppDashboard() {
 
         {/* Baby-feed tracker — shown only for breastfeeding profiles. A mom
             nursing a 0-6mo baby sees today's feeds + diapers right here, so
-            logging is one tap away without digging into a subpage. */}
+            logging is one tap away without digging into a subpage. When the
+            breastfeedingStartDate is set we also show AAP/LLL benchmark
+            ranges so raw counts turn into actionable signals. */}
         {activeChild.kind === "breastfeeding" && (
-          <BabyFeedCard profileId={activeChild.id} locale={locale} />
+          <BabyFeedCard
+            profileId={activeChild.id}
+            breastfeedingStartDate={activeChild.breastfeedingStartDate}
+            locale={locale}
+          />
         )}
 
         {/* Today's Nutrition Progress (hero) */}
