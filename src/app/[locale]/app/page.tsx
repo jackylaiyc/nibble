@@ -20,6 +20,7 @@ import {
 import { RDARing } from "@/components/pediatric/RDARing";
 import { DailySummaryCard } from "@/components/nutrition/DailySummaryCard";
 import { RecentFoodsStrip } from "@/components/nutrition/RecentFoodsStrip";
+import { BabyFeedCard } from "@/components/nutrition/BabyFeedCard";
 import { ScanSourceSheet } from "@/components/scan/ScanSourceSheet";
 import { ProfileSwitcher } from "@/components/layout/ProfileSwitcher";
 import { buildRecentFoods } from "@/lib/nutrition/recentFoods";
@@ -227,6 +228,13 @@ export default function AppDashboard() {
             locale={locale}
             onDismiss={dismissSummary}
           />
+        )}
+
+        {/* Baby-feed tracker — shown only for breastfeeding profiles. A mom
+            nursing a 0-6mo baby sees today's feeds + diapers right here, so
+            logging is one tap away without digging into a subpage. */}
+        {activeChild.kind === "breastfeeding" && (
+          <BabyFeedCard profileId={activeChild.id} locale={locale} />
         )}
 
         {/* Today's Nutrition Progress (hero) */}

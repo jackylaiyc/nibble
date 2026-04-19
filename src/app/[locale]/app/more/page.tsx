@@ -9,6 +9,8 @@ import { Link } from "@/i18n/navigation";
 
 const FEATURES = [
   { emoji: "💬", href: "/app/chat" as const, en: "Ask Nibble", zh: "問 Nibble", subEn: "AI feeding assistant", subZh: "AI 餵養助手" },
+  { emoji: "🤱", href: "/app/baby-feed/log" as const, en: "Baby feed log", zh: "寶寶餵食", subEn: "Breastfeeds, formula, diapers (0-6mo)", subZh: "哺乳、配方奶、尿布（0-6 個月）" },
+  { emoji: "📋", href: "/app/baby-feed/history" as const, en: "Baby feed history", zh: "寶寶餵食紀錄", subEn: "Past feeds grouped by day", subZh: "過去餵食紀錄依日期分組" },
   { emoji: "💩", href: "/app/poop/log" as const, en: "Poop log", zh: "便便紀錄", subEn: "Track color & consistency", subZh: "追蹤顏色與形狀" },
   { emoji: "📋", href: "/app/poop/history" as const, en: "Poop history", zh: "便便歷史", subEn: "Browse past logs", subZh: "瀏覽過去紀錄" },
   { emoji: "😴", href: "/app/sleep" as const, en: "Sleep log", zh: "睡眠紀錄", subEn: "Naps & night sleep", subZh: "午睡與夜間睡眠" },
