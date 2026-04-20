@@ -122,25 +122,18 @@ export default function ScanPage() {
   // re-reading the file (FileReader is async; ObjectURLs aren't serialisable).
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
 
-  // The `preview` object URL is set SYNCHRONOUSLY inside handlePickedFile /
-  // onFileInputChange below so the moment the user picks a file the UI
-  // switches states (no "Take a photo" button lingering for a render while
-  // an effect catches up). This effect is cleanup-only: revokes the URL
-  // when the file changes or the component unmounts, and triggers the
-  // async data-URL compression for eventual persistence.
   useEffect(() => {
     if (!file) {
+      setPreview(null);
       setPhotoDataUrl(null);
       return;
     }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    // Compute the data URL eagerly. We downscale before saving so localStorage
+    // doesn't blow past its quota — most phones produce 4MB photos.
     void compressToDataUrl(file).then(setPhotoDataUrl).catch(() => setPhotoDataUrl(null));
-    const currentPreview = preview;
-    return () => {
-      if (currentPreview) URL.revokeObjectURL(currentPreview);
-    };
-    // Intentionally not including `preview` — we want the cleanup to
-    // capture the URL that was alive at the time the file changed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => URL.revokeObjectURL(url);
   }, [file]);
 
   // Submission / results.
@@ -160,13 +153,7 @@ export default function ScanPage() {
   const triggeredForFileRef = useRef<File | null>(null);
 
   function handlePickedFile(f: File) {
-    // Set the preview object URL in the same render as the file so the UI
-    // switches from "Take a photo" empty-state to "preview + analyzing" in
-    // a single frame. The effect above handles cleanup when the file
-    // changes again or the component unmounts.
-    const url = URL.createObjectURL(f);
     setFile(f);
-    setPreview(url);
     setResult(null);
     setError(null);
     triggeredForFileRef.current = null; // allow auto-analyze on the new file
@@ -438,36 +425,27 @@ export default function ScanPage() {
         {/* Sub-hero */}
         {!result && <p className="text-ink-soft">{t("sub")}</p>}
 
-        {/* Photo preview / capture section.
-            - Gated on !result so non-photo intake paths (label OCR, text
-              search, recent-foods re-log) don't show a stale "Take a photo"
-              button above their already-populated results.
-            - Inside, the "Take a photo" empty-state only shows when we're
-              TRULY waiting for the user to pick an image — no file yet.
-              Once they pick one, preview is set synchronously, so the UI
-              immediately flips to showing the image (no render gap). */}
-        {!result && (
-          <section>
-            {/* Hidden input — the only photo source on this page. Both the big
-                empty-state surface and the in-preview Retake button trigger it. */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={onFileInputChange}
-            />
+        {/* Photo preview — taps open the device's native picker directly */}
+        <section>
+          {/* Hidden input — the only photo source on this page. Both the big
+              empty-state surface and the in-preview Retake button trigger it. */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={onFileInputChange}
+          />
 
-            {file || preview ? (
-              <div className="relative rounded-bubble overflow-hidden bg-black card-pop">
-                {preview && (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={preview}
-                    alt="Plate preview"
-                    className="w-full max-h-[420px] object-contain"
-                  />
-                )}
+          {preview ? (
+            <div className="relative rounded-bubble overflow-hidden bg-black card-pop">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={preview}
+                alt="Plate preview"
+                className="w-full max-h-[420px] object-contain"
+              />
+              {!result && (
                 <div className="absolute bottom-3 right-3">
                   <button
                     type="button"
@@ -477,21 +455,21 @@ export default function ScanPage() {
                     📸 {t("retake")}
                   </button>
                 </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full aspect-[4/3] rounded-bubble bg-white border-2 border-dashed border-border flex flex-col items-center justify-center gap-3 text-ink-soft hover:border-peach-deep hover:text-peach-deep transition"
-              >
-                <div className="text-5xl">📸</div>
-                <span className="font-medium text-center px-4">
-                  {t("choosePhoto")}
-                </span>
-              </button>
-            )}
-          </section>
-        )}
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full aspect-[4/3] rounded-bubble bg-white border-2 border-dashed border-border flex flex-col items-center justify-center gap-3 text-ink-soft hover:border-peach-deep hover:text-peach-deep transition"
+            >
+              <div className="text-5xl">📸</div>
+              <span className="font-medium text-center px-4">
+                {t("choosePhoto")}
+              </span>
+            </button>
+          )}
+        </section>
 
         {/* Error */}
         {error && (
