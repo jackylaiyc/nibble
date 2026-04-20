@@ -23,6 +23,13 @@ const NUTRIENT_KEYS: (keyof NutrientTotals)[] = [
   "dha",
   "sodium",
   "sugar",
+  // Maternal life-stage nutrients — must be summed so pregnant / breastfeeding
+  // daily totals reflect folate / caffeine / etc. intake, not just the baby 14.
+  "folate",
+  "choline",
+  "iodine",
+  "caffeine",
+  "alcohol",
 ];
 
 export function sumFoodTotals(foods: FoodItem[]): NutrientTotals {

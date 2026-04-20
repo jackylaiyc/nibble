@@ -17,6 +17,8 @@ import { computeCoverage } from "@/lib/pediatric/rdaGapAnalysis";
 import { sumFoodTotals } from "@/lib/nutrition/sumFoodTotals";
 import { RDARing } from "@/components/pediatric/RDARing";
 import { DISCLAIMERS } from "@/lib/pediatric/disclaimers";
+import { PortionEditSheet } from "@/components/scan/PortionEditSheet";
+import { AddFoodSheet } from "@/components/scan/AddFoodSheet";
 
 /**
  * Meal detail page — read-only view of a previously saved plate scan.
@@ -52,13 +54,16 @@ export default function MealDetailPage({
 
   const [showAllNutrients, setShowAllNutrients] = useState(false);
 
-  // Edit mode — lets the caregiver amend the time, delete individual foods,
-  // or delete the whole meal. Defaults pull from the saved record; changes
-  // are local until the Save button commits them via updateMeal().
+  // Edit mode — lets the caregiver amend the time, tweak or delete
+  // individual foods, add foods the AI missed, or delete the whole meal.
+  // Defaults pull from the saved record; changes are local until the
+  // Save button commits them via updateMeal().
   const [editMode, setEditMode] = useState(false);
   const [editDate, setEditDate] = useState<string>("");
   const [editTime, setEditTime] = useState<string>("");
   const [editFoods, setEditFoods] = useState<FoodItem[]>([]);
+  const [editingFoodIdx, setEditingFoodIdx] = useState<number | null>(null);
+  const [addFoodOpen, setAddFoodOpen] = useState(false);
 
   function enterEditMode() {
     if (!meal) return;
@@ -70,10 +75,21 @@ export default function MealDetailPage({
 
   function cancelEdit() {
     setEditMode(false);
+    setEditingFoodIdx(null);
+    setAddFoodOpen(false);
   }
 
   function deleteFoodAt(idx: number) {
     setEditFoods((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function replaceFoodAt(idx: number, next: FoodItem) {
+    setEditFoods((prev) => prev.map((f, i) => (i === idx ? next : f)));
+  }
+
+  function addFood(food: FoodItem) {
+    setEditFoods((prev) => [...prev, food]);
+    setAddFoodOpen(false);
   }
 
   function saveEdits() {
@@ -284,9 +300,21 @@ export default function MealDetailPage({
                   locale={locale}
                   t={t}
                   onDelete={editMode ? () => deleteFoodAt(i) : undefined}
+                  onEditPortion={editMode ? () => setEditingFoodIdx(i) : undefined}
                 />
               ))}
             </ul>
+          )}
+
+          {editMode && (
+            <button
+              type="button"
+              onClick={() => setAddFoodOpen(true)}
+              className="mt-3 w-full py-3 px-4 rounded-card border-2 border-dashed border-border text-ink-soft font-medium hover:border-peach-deep hover:text-peach-deep transition flex items-center justify-center gap-2"
+            >
+              <span className="text-lg leading-none">+</span>
+              {locale === "en" ? "Add another food" : "新增其他食物"}
+            </button>
           )}
         </div>
 
@@ -373,6 +401,28 @@ export default function MealDetailPage({
         </div>
       </div>
 
+      {/* Portion edit sheet — only mounted while in edit mode with a food picked. */}
+      {editMode && editingFoodIdx !== null && editFoods[editingFoodIdx] && (
+        <PortionEditSheet
+          food={editFoods[editingFoodIdx]}
+          locale={locale}
+          onCancel={() => setEditingFoodIdx(null)}
+          onSave={(updated) => {
+            replaceFoodAt(editingFoodIdx, updated);
+            setEditingFoodIdx(null);
+          }}
+        />
+      )}
+
+      {/* Add food sheet — search local DB or create custom. */}
+      {editMode && addFoodOpen && (
+        <AddFoodSheet
+          locale={locale}
+          onCancel={() => setAddFoodOpen(false)}
+          onAdd={addFood}
+        />
+      )}
+
       {/* Edit mode footer: save / cancel / delete whole meal */}
       {editMode && (
         <nav
@@ -416,11 +466,13 @@ function FoodInsightCard({
   locale,
   t,
   onDelete,
+  onEditPortion,
 }: {
   food: FoodItem;
   locale: "zh-TW" | "en";
   t: ReturnType<typeof useTranslations>;
   onDelete?: () => void;
+  onEditPortion?: () => void;
 }) {
   const benefit = locale === "en" ? food.benefitEn : food.benefit;
   const risk = locale === "en" ? food.riskEn : food.risk;
@@ -484,7 +536,7 @@ function FoodInsightCard({
       </div>
 
       {(benefit || risk) && (
-        <div className="px-4 pb-4 space-y-1.5">
+        <div className="px-4 pb-3 space-y-1.5">
           {benefit && (
             <div className="flex items-start gap-2 text-sm">
               <span className="shrink-0 mt-0.5">💡</span>
@@ -497,6 +549,18 @@ function FoodInsightCard({
               <p className="text-peach-deep leading-snug">{risk}</p>
             </div>
           )}
+        </div>
+      )}
+
+      {onEditPortion && (
+        <div className="px-4 pb-3">
+          <button
+            type="button"
+            onClick={onEditPortion}
+            className="w-full py-2 px-3 rounded-card border border-border text-xs font-medium text-ink-soft hover:border-peach-deep hover:text-peach-deep transition"
+          >
+            {locale === "en" ? "✏️ Edit portion" : "✏️ 調整份量"}
+          </button>
         </div>
       )}
     </li>

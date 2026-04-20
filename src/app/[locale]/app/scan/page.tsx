@@ -7,6 +7,8 @@ import { useChildProfileStore } from "@/stores/childProfileStore";
 import { useMealStore, type FoodItem, type PortionUnit } from "@/stores/mealStore";
 import { useScanIntakeStore } from "@/stores/scanIntakeStore";
 import { sumFoodTotals } from "@/lib/nutrition/sumFoodTotals";
+import { PortionEditSheet } from "@/components/scan/PortionEditSheet";
+import { AddFoodSheet } from "@/components/scan/AddFoodSheet";
 import { getLifeStage, type AgeBucket } from "@/lib/pediatric/ageBucket";
 import {
   getAllergen,
@@ -147,6 +149,13 @@ export default function ScanPage() {
   // MealRecord is auto-derived from this on save so existing badges keep working.
   const [mealDate, setMealDate] = useState<string>(() => todayKey());
   const [mealTime, setMealTime] = useState<string>(() => currentHHMM());
+
+  // Edit-a-food state. The scan page is already a pre-save review, so the
+  // foods list is directly editable — no separate "enter edit mode" toggle.
+  // editingFoodIdx points at the food currently being tweaked (portion) via
+  // the PortionEditSheet; addFoodOpen toggles the AddFoodSheet.
+  const [editingFoodIdx, setEditingFoodIdx] = useState<number | null>(null);
+  const [addFoodOpen, setAddFoodOpen] = useState(false);
 
   // Track which file we've already auto-triggered analysis for, so the effect
   // doesn't re-fire on every state change after a successful scan.
@@ -321,6 +330,94 @@ export default function ScanPage() {
     setSavedToast(true);
     // Give the toast a beat, then go home.
     setTimeout(() => router.push("/app"), 900);
+  }
+
+  // ─── food list mutations ──────────────────────────────────────────────
+  // All three replace the foods array and recompute totals via sumFoodTotals
+  // so the RDA coverage rings + per-food cards stay in sync instantly.
+
+  function replaceFoodAt(idx: number, next: FoodItem) {
+    setResult((prev) => {
+      if (!prev) return prev;
+      const foods = prev.foods.map((f, i) =>
+        i === idx
+          ? {
+              ...f,
+              name: next.name,
+              nameEn: next.nameEn ?? f.nameEn,
+              portionAmount: next.portionAmount,
+              portionUnit: next.portionUnit,
+              gramsEstimate: next.gramsEstimate,
+              nutrients: next.nutrients,
+              allergensPresent: next.allergensPresent ?? f.allergensPresent,
+              source: next.source ?? f.source,
+              benefit: next.benefit ?? f.benefit,
+              benefitEn: next.benefitEn ?? f.benefitEn,
+              risk: next.risk ?? f.risk,
+              riskEn: next.riskEn ?? f.riskEn,
+              suitability: next.suitability ?? f.suitability,
+            }
+          : f,
+      );
+      return { foods, totals: sumFoodTotals(foods as FoodItem[]) };
+    });
+  }
+
+  function deleteFoodAt(idx: number) {
+    setResult((prev) => {
+      if (!prev) return prev;
+      const foods = prev.foods.filter((_, i) => i !== idx);
+      return { foods, totals: sumFoodTotals(foods as FoodItem[]) };
+    });
+  }
+
+  function addFood(food: FoodItem) {
+    setResult((prev) => {
+      if (!prev) {
+        // Edge case: the "+ Add food" button isn't rendered unless we
+        // already have a result, but be defensive anyway.
+        return {
+          foods: [
+            {
+              name: food.name,
+              nameEn: food.nameEn ?? food.name,
+              portionAmount: food.portionAmount,
+              portionUnit: food.portionUnit,
+              gramsEstimate: food.gramsEstimate,
+              nutrients: food.nutrients,
+              allergensPresent: food.allergensPresent ?? [],
+              source: food.source,
+              benefit: food.benefit,
+              benefitEn: food.benefitEn,
+              risk: food.risk,
+              riskEn: food.riskEn,
+              suitability: food.suitability,
+            },
+          ],
+          totals: sumFoodTotals([food]),
+        };
+      }
+      const foods = [
+        ...prev.foods,
+        {
+          name: food.name,
+          nameEn: food.nameEn ?? food.name,
+          portionAmount: food.portionAmount,
+          portionUnit: food.portionUnit,
+          gramsEstimate: food.gramsEstimate,
+          nutrients: food.nutrients,
+          allergensPresent: food.allergensPresent ?? [],
+          source: food.source,
+          benefit: food.benefit,
+          benefitEn: food.benefitEn,
+          risk: food.risk,
+          riskEn: food.riskEn,
+          suitability: food.suitability,
+        },
+      ];
+      return { foods, totals: sumFoodTotals(foods as FoodItem[]) };
+    });
+    setAddFoodOpen(false);
   }
 
   // ─── derived state ─────────────────────────────────────────────────────
@@ -510,9 +607,14 @@ export default function ScanPage() {
 
             {/* Foods with insights */}
             <div>
-              <h2 className="font-display font-semibold text-ink mb-3">
+              <h2 className="font-display font-semibold text-ink mb-1">
                 {t("foodsTitle")}
               </h2>
+              <p className="text-xs text-ink-faded mb-3">
+                {locale === "en"
+                  ? "Tap a food to tweak the portion or remove it."
+                  : "點選食物可調整份量或刪除。"}
+              </p>
               <ul className="space-y-3">
                 {result.foods.map((food, i) => {
                   const unitLabel = t(
@@ -572,7 +674,7 @@ export default function ScanPage() {
 
                       {/* Insights section */}
                       {(benefit || risk) && (
-                        <div className="px-4 pb-4 space-y-1.5">
+                        <div className="px-4 pb-3 space-y-1.5">
                           {benefit && (
                             <div className="flex items-start gap-2 text-sm">
                               <span className="shrink-0 mt-0.5">💡</span>
@@ -587,10 +689,47 @@ export default function ScanPage() {
                           )}
                         </div>
                       )}
+
+                      {/* Edit actions — per-food portion tweak + delete. These are
+                          always available on the scan review since the whole page
+                          is a pre-save moment. */}
+                      <div className="px-4 pb-3 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingFoodIdx(i)}
+                          className="flex-1 py-2 px-3 rounded-card border border-border text-xs font-medium text-ink-soft hover:border-peach-deep hover:text-peach-deep transition"
+                        >
+                          {locale === "en" ? "✏️ Edit portion" : "✏️ 調整份量"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const msg = locale === "en"
+                              ? `Remove "${food.name}" from this meal?`
+                              : `要從這餐移除「${food.name}」嗎？`;
+                            if (confirm(msg)) deleteFoodAt(i);
+                          }}
+                          className="py-2 px-3 rounded-card border border-red-200 text-xs font-medium text-red-600 hover:bg-red-50 transition"
+                          aria-label={locale === "en" ? "Remove food" : "移除食物"}
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </li>
                   );
                 })}
               </ul>
+
+              {/* Add food button — for things the AI missed or the user
+                  ate on top of what was scanned. */}
+              <button
+                type="button"
+                onClick={() => setAddFoodOpen(true)}
+                className="mt-3 w-full py-3 px-4 rounded-card border-2 border-dashed border-border text-ink-soft font-medium hover:border-peach-deep hover:text-peach-deep transition flex items-center justify-center gap-2"
+              >
+                <span className="text-lg leading-none">+</span>
+                {locale === "en" ? "Add another food" : "新增其他食物"}
+              </button>
             </div>
 
             {/* Daily progress — accumulated across all meals today */}
@@ -782,6 +921,28 @@ export default function ScanPage() {
           </section>
         )}
       </div>
+
+      {/* Portion edit sheet — only mounted when a food is being edited. */}
+      {editingFoodIdx !== null && result && result.foods[editingFoodIdx] && (
+        <PortionEditSheet
+          food={result.foods[editingFoodIdx] as FoodItem}
+          locale={locale}
+          onCancel={() => setEditingFoodIdx(null)}
+          onSave={(updated) => {
+            replaceFoodAt(editingFoodIdx, updated);
+            setEditingFoodIdx(null);
+          }}
+        />
+      )}
+
+      {/* Add food sheet — search local DB or create a quick custom item. */}
+      {addFoodOpen && (
+        <AddFoodSheet
+          locale={locale}
+          onCancel={() => setAddFoodOpen(false)}
+          onAdd={addFood}
+        />
+      )}
 
       <PaywallModal
         open={paywallOpen}
