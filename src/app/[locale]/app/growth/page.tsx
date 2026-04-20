@@ -122,6 +122,29 @@ export default function GrowthPage() {
     );
   }
 
+  // Growth charts / WHO percentiles only apply to infant profiles. For
+  // pregnancy / breastfeeding the stored dob is a placeholder, so skip the
+  // percentile math and show a switch-profile nudge instead.
+  const isInfant = !activeChild.kind || activeChild.kind === "infant";
+  if (!isInfant) {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center px-8 text-center">
+        <div className="text-6xl mb-4">📈</div>
+        <p className="text-ink-soft mb-6">
+          {locale === "en"
+            ? "Growth tracking is for babies and toddlers. Switch to an infant profile to chart weight, height & head."
+            : "成長追蹤適用於寶寶與幼兒。切換至寶寶檔案即可記錄身高體重頭圍。"}
+        </p>
+        <Link
+          href="/app"
+          className="rounded-full bg-peach-deep text-white font-semibold px-8 py-3 bubble-shadow"
+        >
+          ← {locale === "en" ? "Back to home" : "回首頁"}
+        </Link>
+      </main>
+    );
+  }
+
   const ageInfo = ageInfoFromDob(activeChild.dob);
   const sexForWho: Sex | null =
     activeChild.sex === "female"

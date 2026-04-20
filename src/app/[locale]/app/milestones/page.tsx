@@ -65,9 +65,15 @@ export default function MilestonesPage() {
   // opens a past-achieved tile).
   const seenUnlocked = useRef<Set<MilestoneKey> | null>(null);
 
-  const currentBucket = activeChild
-    ? ageInfoFromDob(activeChild.dob).bucket
-    : null;
+  // Milestones are only meaningful for infant profiles — a pregnant or
+  // breastfeeding profile stores a placeholder `dob`, and calling
+  // ageInfoFromDob on it would produce a nonsensical bucket (see the
+  // kind-guarded empty state below).
+  const isInfant = !activeChild?.kind || activeChild.kind === "infant";
+  const currentBucket =
+    activeChild && isInfant && activeChild.dob
+      ? ageInfoFromDob(activeChild.dob).bucket
+      : null;
 
   const grouped = useMemo(() => groupByBucket(milestonesSorted()), []);
 
@@ -106,12 +112,35 @@ export default function MilestonesPage() {
     );
   }
 
+  // Non-infant profiles (pregnant, breastfeeding) don't have baby milestones
+  // to track against their own profile — show a gentle nudge to switch
+  // profile rather than a broken grid with wrong age bucket.
+  if (!isInfant) {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center px-8 text-center">
+        <div className="text-6xl mb-4">🎉</div>
+        <p className="text-ink-soft mb-6">
+          {locale === "en"
+            ? "Milestones are for infant profiles. Switch to a baby's profile to track their firsts."
+            : "成長里程碑只適用於寶寶檔案。切換至寶寶的檔案即可追蹤。"}
+        </p>
+        <Link
+          href="/app"
+          className="rounded-full bg-peach-deep text-white font-semibold px-8 py-3 bubble-shadow"
+        >
+          ← {locale === "en" ? "Back to home" : "回首頁"}
+        </Link>
+      </main>
+    );
+  }
+
   const activeMilestone = editing
     ? milestonesSorted().find((m) => m.key === editing)
     : null;
   const activeRecord =
     editing ? getForChild(activeChild.id, editing) : undefined;
 
+  // Safe — the !isInfant guard above ensures dob is a real infant DOB here.
   const ageInfoNow = ageInfoFromDob(activeChild.dob);
 
   return (

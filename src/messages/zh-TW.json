@@ -63,6 +63,15 @@
     "footerPrivacy": "隱私政策",
     "footerPricing": "方案價格"
   },
+  "Login": {
+    "tagline": "一張照片，安心餵食。",
+    "title": "登入以繼續",
+    "sub": "使用 Google 登入讓資料跨裝置同步，不怕清除快取就不見。7 天免費試用從登入後開始。",
+    "googleButton": "使用 Google 繼續",
+    "signingIn": "正在跳轉至 Google…",
+    "legal": "繼續即表示你同意我們的<terms>服務條款</terms>與<privacy>隱私政策</privacy>。",
+    "backHome": "回首頁"
+  },
   "Disclaimer": {
     "footer": "僅供教育參考，並非醫療建議。有疑慮請諮詢兒科醫師。",
     "aiResponse": "本回應僅供教育參考，並非醫療建議。如有疑慮請諮詢兒科醫師。"

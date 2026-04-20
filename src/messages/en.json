@@ -63,6 +63,15 @@
     "footerPrivacy": "Privacy",
     "footerPricing": "Pricing"
   },
+  "Login": {
+    "tagline": "Snap the plate. Know if they got enough.",
+    "title": "Sign in to continue",
+    "sub": "We use Google sign-in so your data syncs across devices and survives cache-clears. Your 7-day free trial starts after sign-in.",
+    "googleButton": "Continue with Google",
+    "signingIn": "Redirecting to Google…",
+    "legal": "By continuing, you agree to our <terms>Terms</terms> and <privacy>Privacy Policy</privacy>.",
+    "backHome": "Back to home"
+  },
   "Disclaimer": {
     "footer": "Educational use only. Not medical advice. Always consult your pediatrician.",
     "aiResponse": "This is educational information only, not medical advice. Please contact your pediatrician with any concerns."

@@ -225,6 +225,7 @@ function Header({
       <nav className="hidden md:flex items-center gap-6 text-sm text-ink-soft">
         <a href="#how" className="hover:text-ink">{tNav("features")}</a>
         <Link href="/pricing" className="hover:text-ink">{tNav("pricing")}</Link>
+        <Link href="/login" className="hover:text-ink">{tNav("login")}</Link>
       </nav>
       <Link
         href="/onboarding"

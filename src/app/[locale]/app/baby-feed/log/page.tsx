@@ -70,7 +70,31 @@ export default function BabyFeedLogPage() {
     );
   }
 
-  const isBreastfeedingProfile = activeChild.kind === "breastfeeding";
+  // Only breastfeeding moms and newborns need this screen — an older-infant
+  // or pregnant profile logging a bottle feed is semantically nonsense and
+  // would pollute the history view. Block with a gentle nudge so the
+  // caregiver either switches profile or adds a newborn.
+  const canLogBabyFeed =
+    activeChild.kind === "breastfeeding" || activeChild.kind === "newborn";
+  if (!canLogBabyFeed) {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center p-8 text-center">
+        <div className="text-6xl mb-4">🍼</div>
+        <p className="text-ink-soft mb-6 max-w-sm">
+          {L(
+            "Baby feed tracking is for breastfeeding or newborn profiles. Switch profiles to log here.",
+            "寶寶餵食紀錄適用於哺乳中的媽媽或新生兒檔案。請切換檔案以記錄。",
+          )}
+        </p>
+        <Link
+          href="/app"
+          className="rounded-full bg-peach-deep text-white font-semibold px-8 py-3 bubble-shadow"
+        >
+          ← {L("Back to home", "回首頁")}
+        </Link>
+      </main>
+    );
+  }
 
   function handleSave() {
     if (!activeChild) return;
@@ -110,20 +134,6 @@ export default function BabyFeedLogPage() {
       </header>
 
       <div className="max-w-xl mx-auto px-5 py-6 space-y-6">
-        {!isBreastfeedingProfile && (
-          <div className="rounded-card bg-butter/40 border border-butter-deep/30 p-4 text-sm">
-            <p className="font-semibold text-ink mb-1">
-              {L("Tip", "提示")}
-            </p>
-            <p className="text-ink-soft">
-              {L(
-                "Baby feed tracking is designed for breastfeeding profiles. You can still log here — it's tied to the active profile.",
-                "寶寶餵食紀錄是為哺乳中的媽媽設計，不過你仍可以記錄。資料會連結到目前使用中的檔案。",
-              )}
-            </p>
-          </div>
-        )}
-
         {/* Type tabs */}
         <div className="grid grid-cols-3 gap-2">
           {([

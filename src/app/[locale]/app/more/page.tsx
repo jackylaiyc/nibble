@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useLocale } from "next-intl";
 import { Link } from "@/i18n/navigation";
+import { useAuthStore } from "@/stores/authStore";
 
 /**
- * "More" page — secondary features that aren't part of the main scan flow.
+ * "More" page — secondary features that aren't part of the main scan flow,
+ * plus the account section (sign-out) at the bottom.
  */
 
 const FEATURES = [
@@ -22,6 +25,21 @@ const FEATURES = [
 
 export default function MorePage() {
   const locale = useLocale() as "zh-TW" | "en";
+  const user = useAuthStore((s) => s.user);
+  const signOut = useAuthStore((s) => s.signOut);
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await signOut();
+      // signOut() does a full window.location = "/" itself; this is just
+      // defensive in case it's ever changed to be non-redirecting.
+    } catch (err) {
+      console.error("[more] sign-out failed:", err);
+      setSigningOut(false);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-cream pb-28">
@@ -50,6 +68,41 @@ export default function MorePage() {
             </li>
           ))}
         </ul>
+
+        {/* Account section — only rendered once we know who's signed in.
+            Middleware gates /app/* behind auth so we always expect a user
+            here, but we guard anyway in case auth is disabled for local dev. */}
+        {user && (
+          <section className="mt-10 pt-6 border-t border-border">
+            <h2 className="font-display font-semibold text-ink text-sm mb-3 px-1">
+              {locale === "en" ? "Account" : "帳戶"}
+            </h2>
+            <div className="rounded-card bg-white border border-border p-4 space-y-3">
+              <div>
+                <p className="text-xs text-ink-faded">
+                  {locale === "en" ? "Signed in as" : "目前登入"}
+                </p>
+                <p className="text-sm font-medium text-ink truncate">
+                  {user.email ?? user.id}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="w-full py-2.5 rounded-full border border-border hover:border-peach-deep text-sm font-medium text-ink transition disabled:opacity-60"
+              >
+                {signingOut
+                  ? locale === "en"
+                    ? "Signing out…"
+                    : "登出中…"
+                  : locale === "en"
+                    ? "Sign out"
+                    : "登出"}
+              </button>
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );
