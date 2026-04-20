@@ -988,7 +988,10 @@ function compressToDataUrl(file: File): Promise<string> {
       }
       const img = new Image();
       img.onload = () => {
-        const maxEdge = 800;
+        // 1200px keeps enough texture detail for Gemini to read garnishes,
+        // sauces, and portion cues that 800px was quietly losing. Still
+        // ~150-300 KB after JPEG compression so uploads stay quick.
+        const maxEdge = 1200;
         const ratio = Math.min(1, maxEdge / Math.max(img.width, img.height));
         const w = Math.round(img.width * ratio);
         const h = Math.round(img.height * ratio);
