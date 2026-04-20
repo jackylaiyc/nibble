@@ -14,6 +14,12 @@
 
 /** Key used to look up RDA + priority nutrients + food cautions. */
 export type LifeStageKey =
+  // Newborn (0-5mo) — NO RDA table entry. These babies are exclusively
+  // breast/formula-fed and self-regulate via demand feeding; the baby-feed
+  // tracker (counts + benchmarks) is the relevant metric, not macro/micro
+  // RDA coverage. Dashboard code must branch on profile.kind to avoid
+  // looking up RDA[this key] — there's no row.
+  | "newborn-0-5mo"
   // Infant / toddler / child — the `48mo+` key is preserved for back-compat
   // with localStorage records but now represents 4–8 yr specifically (it
   // used to be "4+ years, forever"). A separate `child-9-13yr` bucket picks
@@ -40,8 +46,8 @@ export type AgeBucket = LifeStageKey;
 /** Minimal input shape — mirrors the fields we care about on `Child`. Decoupled
  *  from the store to avoid circular imports. */
 export interface LifeStageInput {
-  kind?: "infant" | "pregnant" | "breastfeeding";
-  /** Required when kind is "infant" (or missing, defaults to infant). */
+  kind?: "newborn" | "infant" | "pregnant" | "breastfeeding";
+  /** Required when kind is "newborn" or "infant". */
   dob?: string;
   /** Required when kind is "pregnant". ISO YYYY-MM-DD. */
   pregnancyDueDate?: string;
@@ -50,6 +56,13 @@ export interface LifeStageInput {
 }
 
 export type LifeStage =
+  | {
+      kind: "newborn";
+      key: "newborn-0-5mo";
+      months: number;
+      weeks: number;
+      displayShort: string; // "3 weeks old", "11 weeks old"
+    }
   | {
       kind: "infant";
       key: "6-8mo" | "9-11mo" | "12-23mo" | "24-47mo" | "48mo+" | "child-9-13yr";
@@ -164,6 +177,24 @@ export function weeksPostpartumFromStart(start: string | Date, now: Date = new D
 export function getLifeStage(input: LifeStageInput, now: Date = new Date()): LifeStage {
   const kind = input.kind ?? "infant";
 
+  if (kind === "newborn") {
+    const d = input.dob ? new Date(input.dob) : now;
+    const months = monthsBetween(d, now);
+    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+    const weeks = Math.max(0, Math.round((now.getTime() - d.getTime()) / msPerWeek));
+    return {
+      kind: "newborn",
+      key: "newborn-0-5mo",
+      months,
+      weeks,
+      displayShort: weeks < 2
+        ? `${Math.max(1, Math.floor((now.getTime() - d.getTime()) / (24 * 60 * 60 * 1000)))} days old`
+        : weeks < 14
+          ? `${weeks} weeks old`
+          : `${months} mo old`,
+    };
+  }
+
   if (kind === "pregnant") {
     const weeks = input.pregnancyDueDate
       ? weeksPregnantFromDueDate(input.pregnancyDueDate, now)
@@ -211,6 +242,8 @@ export function getLifeStage(input: LifeStageInput, now: Date = new Date()): Lif
 // ─── labels ────────────────────────────────────────────────────────────────
 
 export const AGE_BUCKET_LABELS: Record<AgeBucket, { en: string; "zh-TW": string }> = {
+  // Newborn (milk only — no plate-scan)
+  "newborn-0-5mo": { en: "Newborn · 0–5 months", "zh-TW": "新生兒 · 0–5 個月" },
   // Infant / toddler / child
   "6-8mo": { en: "6–8 months", "zh-TW": "6–8 個月" },
   "9-11mo": { en: "9–11 months", "zh-TW": "9–11 個月" },

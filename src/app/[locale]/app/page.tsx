@@ -230,20 +230,29 @@ export default function AppDashboard() {
           />
         )}
 
-        {/* Baby-feed tracker — shown only for breastfeeding profiles. A mom
-            nursing a 0-6mo baby sees today's feeds + diapers right here, so
-            logging is one tap away without digging into a subpage. When the
-            breastfeedingStartDate is set we also show AAP/LLL benchmark
-            ranges so raw counts turn into actionable signals. */}
-        {activeChild.kind === "breastfeeding" && (
+        {/* Baby-feed tracker — shown for NEWBORN profiles (the baby's own
+            profile). Mom's breastfeeding profile shows HER nutrition only;
+            baby tracking lives on a separate newborn profile, reflecting the
+            caregiver's mental model ("this is tracking baby, not me").
+            The breastfeedingStartDate field on newborn profiles is populated
+            with the baby's DOB during onboarding so feeding benchmarks can
+            compute weeks-of-life. */}
+        {activeChild.kind === "newborn" && (
           <BabyFeedCard
             profileId={activeChild.id}
-            breastfeedingStartDate={activeChild.breastfeedingStartDate}
+            breastfeedingStartDate={
+              activeChild.breastfeedingStartDate ?? activeChild.dob
+            }
             locale={locale}
           />
         )}
 
-        {/* Today's Nutrition Progress (hero) */}
+        {/* Today's Nutrition Progress (hero) — hidden for newborn profiles
+            because 0-5mo babies self-regulate via milk and don't have
+            plate-scan-driven RDA targets. Everything below this block
+            (scan CTA, meals strip, recent foods) is also hidden for
+            newborns; their whole dashboard is the BabyFeedCard + quick links. */}
+        {activeChild.kind !== "newborn" && (<>
         <section className="rounded-bubble bg-white card-pop p-5">
           <h2 className="font-display font-semibold text-ink mb-1">
             {locale === "en" ? "Today's nutrition" : "今日營養"}
@@ -366,6 +375,7 @@ export default function AppDashboard() {
             </div>
           </section>
         )}
+        </>)}
 
         {/* Quick links */}
         <section>

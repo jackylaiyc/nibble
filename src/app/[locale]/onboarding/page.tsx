@@ -99,7 +99,7 @@ export default function OnboardingPage() {
     0: !!kind,
     1: name.trim().length > 0,
     2:
-      kind === "infant"
+      kind === "infant" || kind === "newborn"
         ? !!dob && !Number.isNaN(new Date(dob).getTime())
         : kind === "pregnant"
           ? !!pregnancyDueDate && !Number.isNaN(new Date(pregnancyDueDate).getTime())
@@ -124,8 +124,9 @@ export default function OnboardingPage() {
 
   function next() {
     if (!canAdvance[step]) return;
-    // Skip Step 3 (feeding style) for non-infant kinds — those users don't
-    // have a feeding-style choice to make; jump straight to allergens.
+    // Skip Step 3 (feeding style) for any non-infant kind — feeding style
+    // only applies to 6mo+ babies eating solids. Newborn / pregnant /
+    // breastfeeding all jump straight to allergens.
     if (step === 2 && kind !== "infant") {
       setStep(4);
       return;
@@ -151,12 +152,12 @@ export default function OnboardingPage() {
     if (!consent || saving) return;
     setSaving(true);
 
-    // For non-infant profiles `dob` is unused downstream but must be a valid
-    // ISO string (the Child interface requires it). Store today to keep the
-    // field stable and non-breaking for any legacy code that still reads it.
+    // `dob` is required on Child for back-compat. For maternal profiles
+    // (pregnant / breastfeeding) it's semantically meaningless — we store
+    // today's ISO. For infant / newborn it's the baby's actual DOB.
     const todayIso = new Date().toISOString().slice(0, 10);
     const storedDob =
-      kind === "infant"
+      kind === "infant" || kind === "newborn"
         ? dob
         : kind === "breastfeeding"
           ? breastfeedingStartDate || todayIso
@@ -170,8 +171,14 @@ export default function OnboardingPage() {
       avatar,
       feedingStyle: kind === "infant" ? feedingStyle : undefined,
       pregnancyDueDate: kind === "pregnant" ? pregnancyDueDate : undefined,
+      // Newborn profiles double-populate breastfeedingStartDate with the
+      // baby's DOB so the BabyFeedCard benchmarks can compute weeks-of-life.
       breastfeedingStartDate:
-        kind === "breastfeeding" ? breastfeedingStartDate : undefined,
+        kind === "breastfeeding"
+          ? breastfeedingStartDate
+          : kind === "newborn"
+            ? dob
+            : undefined,
       allergens: noneKnown ? [] : allergens,
       notes: "",
     });
@@ -221,6 +228,13 @@ export default function OnboardingPage() {
             dob={dob}
             setDob={setDob}
             ageInfo={ageInfo}
+          />
+        )}
+        {step === 2 && kind === "newborn" && (
+          <Step2NewbornDob
+            locale={locale}
+            dob={dob}
+            setDob={setDob}
           />
         )}
         {step === 2 && kind === "pregnant" && (
@@ -740,28 +754,36 @@ function Step0KindPicker({
     subZh: string;
   }> = [
     {
+      key: "newborn",
+      emoji: "🍼",
+      titleEn: "A newborn (0–5 months)",
+      titleZh: "新生兒（0–5 個月）",
+      subEn: "Still on milk only. Track breastfeeds, bottles & diapers.",
+      subZh: "還在喝奶階段，追蹤哺乳、奶瓶與尿布，不含副食品。",
+    },
+    {
       key: "infant",
       emoji: "👶",
-      titleEn: "A baby or toddler",
-      titleZh: "寶寶或幼兒",
-      subEn: "6 months to 4 years old. Track iron, zinc, DHA & more.",
-      subZh: "6 個月到 4 歲，追蹤鐵、鋅、DHA 等關鍵營養。",
+      titleEn: "A baby or child (6mo–13yr)",
+      titleZh: "寶寶或孩子（6 個月–13 歲）",
+      subEn: "Eating solids. Track iron, zinc, DHA, calcium & more.",
+      subZh: "已開始吃副食品，追蹤鐵、鋅、DHA、鈣等關鍵營養。",
     },
     {
       key: "pregnant",
       emoji: "🤰",
       titleEn: "I'm pregnant",
       titleZh: "我正在懷孕",
-      subEn: "Track folate, iron, DHA. Flag alcohol, raw fish & high-caffeine.",
-      subZh: "追蹤葉酸、鐵、DHA，提醒避免酒精、生食與過量咖啡因。",
+      subEn: "My own nutrition. Folate, iron, DHA + alcohol / caffeine alerts.",
+      subZh: "媽媽自己的營養：葉酸、鐵、DHA，提醒避免酒精與過量咖啡因。",
     },
     {
       key: "breastfeeding",
       emoji: "🤱",
       titleEn: "I'm breastfeeding",
       titleZh: "我正在哺乳",
-      subEn: "Track iodine, DHA, calcium. Mind caffeine & timing of alcohol.",
-      subZh: "追蹤碘、DHA、鈣，留意咖啡因與哺乳前的酒精。",
+      subEn: "My own nutrition. Iodine, DHA, calcium + caffeine alerts.",
+      subZh: "媽媽自己的營養：碘、DHA、鈣，留意咖啡因與哺乳前的酒精。",
     },
   ];
   return (
@@ -933,6 +955,99 @@ function Step2LactationStart({
             {preview.months < 7
               ? L("0-6 month phase — higher calorie needs", "0-6 個月階段 — 熱量需求較高")
               : L("7+ month phase", "7 個月以上階段")}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Step 2 variant: newborn baby DOB (0-5 months) ────────────────────────
+// Tight date range so the user can't accidentally pick a DOB that makes
+// this a 2-year-old — that should be the "infant" profile kind. Live
+// days/weeks/months preview mirrors the breastfeeding-start picker.
+
+function Step2NewbornDob({
+  locale,
+  dob,
+  setDob,
+}: {
+  locale: "zh-TW" | "en";
+  dob: string;
+  setDob: (s: string) => void;
+}) {
+  const L = (en: string, zh: string) => (locale === "en" ? en : zh);
+  // Range: up to ~6 months ago; can't be in the future.
+  const today = new Date().toISOString().slice(0, 10);
+  const minDate = new Date();
+  minDate.setMonth(minDate.getMonth() - 6);
+  const min = minDate.toISOString().slice(0, 10);
+
+  // useMemo keeps Date.now() out of render body (React 19 flags it as
+  // impure). Recomputed only when the DOB string actually changes.
+  const preview = useMemo(() => {
+    if (!dob) return null;
+    const d = new Date(dob);
+    if (Number.isNaN(d.getTime())) return null;
+    const msPerDay = 24 * 60 * 60 * 1000;
+    // Date.now() inside useMemo is deliberate — we want the current time at
+    // first render after DOB changes. No re-render-on-tick is needed here.
+    const days = Math.max(
+      0,
+      // eslint-disable-next-line react-hooks/purity
+      Math.floor((Date.now() - d.getTime()) / msPerDay),
+    );
+    const weeks = Math.floor(days / 7);
+    const months = Math.floor(days / 30.44);
+    return { days, weeks, months };
+  }, [dob]);
+
+  return (
+    <div className="space-y-8">
+      <StepHeader
+        title={L("When was baby born?", "寶寶什麼時候出生的？")}
+        sub={L(
+          "We'll tailor feed and diaper benchmarks to your baby's exact weeks of life — they change fast in the first few months.",
+          "我們會依照寶寶出生週數調整哺乳與尿布的建議範圍。頭幾個月變化很快，精確一點會更有用。",
+        )}
+      />
+      <div>
+        <label
+          htmlFor="newborn-dob"
+          className="block text-sm font-medium text-ink mb-2"
+        >
+          {L("Baby's date of birth", "寶寶生日")}
+        </label>
+        <input
+          id="newborn-dob"
+          type="date"
+          value={dob}
+          min={min}
+          max={today}
+          onChange={(e) => setDob(e.target.value)}
+          className="w-full px-5 py-4 rounded-card bg-white border border-border text-lg focus:outline-none focus:ring-2 focus:ring-peach-deep/40 focus:border-peach-deep transition"
+        />
+        <p className="mt-2 text-xs text-ink-faded">
+          {L(
+            "Accepts babies 0–5 months old. For 6+ months, use the 'baby or child' option instead so the plate-scan features are available.",
+            "僅接受 0–5 個月大的寶寶。6 個月以上請改選「寶寶或孩子」，才有餐盤掃描功能。",
+          )}
+        </p>
+      </div>
+      {preview && (
+        <div className="rounded-card bg-sage/20 border border-sage/40 p-5">
+          <p className="text-sm font-medium text-sage-deep">
+            {preview.weeks < 2
+              ? L(`${preview.days} days old`, `出生 ${preview.days} 天`)
+              : preview.weeks < 14
+                ? L(`${preview.weeks} weeks old`, `出生 ${preview.weeks} 週`)
+                : L(`${preview.months} months old`, `${preview.months} 個月大`)}
+          </p>
+          <p className="mt-1 text-base text-ink leading-snug">
+            {L(
+              "Baby's feed card will show AAP/LLL expected ranges for this age.",
+              "寶寶的餵食卡會顯示這個週數的 AAP/LLL 建議範圍。",
+            )}
           </p>
         </div>
       )}

@@ -50,6 +50,15 @@ export interface RdaTarget {
 export type RdaRow = Partial<Record<Nutrient, RdaTarget>>;
 
 export const RDA: Record<AgeBucket, RdaRow> = {
+  // Newborn (0–5mo): exclusive breastfeeding / formula per WHO/AAP. Babies
+  // this age self-regulate intake — no meaningful plate-scan-driven RDA
+  // tracking happens. Row kept empty so consumers that do `RDA[bucket]`
+  // blindly get a defined-but-empty object rather than crashing; any
+  // caller computing coverage against it will simply produce 0 cells,
+  // and the dashboard branches on `profile.kind === "newborn"` to
+  // render the baby-feed tracker instead of nutrient rings.
+  "newborn-0-5mo": {},
+
   "6-8mo": {
     calories: { value: 600, unit: "kcal" },
     protein: { value: 11, unit: "g" },
@@ -302,6 +311,9 @@ export const NUTRIENT_LABELS: Record<Nutrient, { en: string; "zh-TW": string; em
  * - Breastfeeding: iodine (highest lifetime), DHA, calcium, choline, caffeine
  */
 export const PRIORITY_NUTRIENTS: Record<AgeBucket, Nutrient[]> = {
+  // Newborn — no nutrients to surface, the dashboard branches away from
+  // nutrient rings for this kind. Empty array keeps the Record type happy.
+  "newborn-0-5mo": [],
   // Infant / toddler / child
   "6-8mo": ["iron", "zinc", "protein", "dha", "calories"],
   "9-11mo": ["iron", "zinc", "protein", "dha", "calories"],

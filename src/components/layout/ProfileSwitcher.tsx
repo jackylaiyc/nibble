@@ -24,6 +24,7 @@ interface Props {
 }
 
 const KIND_EMOJI: Record<ProfileKind, string> = {
+  newborn: "🍼",
   infant: "👶",
   pregnant: "🤰",
   breastfeeding: "🤱",

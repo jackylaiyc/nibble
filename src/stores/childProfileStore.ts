@@ -11,8 +11,18 @@ import type { AllergenKey } from "@/lib/pediatric/allergenRegistry";
 
 export type FeedingStyle = "blw" | "puree" | "mixed";
 
-/** Discriminator for which kind of nutrition profile this is. */
-export type ProfileKind = "infant" | "pregnant" | "breastfeeding";
+/**
+ * Discriminator for which kind of nutrition profile this is.
+ *
+ * - "newborn"       — 0-5mo baby. Tracks milk feeds / bottles / diapers.
+ *                     No plate scan, no adult RDA rings. DOB required.
+ * - "infant"        — 6mo-13yr. Plate-scan-driven RDA tracking. DOB required.
+ * - "pregnant"      — pregnant woman. Tracks HER nutrition, trimester-aware.
+ * - "breastfeeding" — breastfeeding woman. Tracks HER nutrition + separate
+ *                     baby-feed logging can attach to this profile or a
+ *                     dedicated "newborn" profile — they are distinct.
+ */
+export type ProfileKind = "newborn" | "infant" | "pregnant" | "breastfeeding";
 
 /**
  * A nutrition profile. Originally only "Child" (infants/toddlers) but now

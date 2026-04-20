@@ -116,6 +116,8 @@ interface ErrorPayload {
  * hard rules server-side via `applyLifeStageCautions` after parsing.
  */
 const LIFE_STAGE_CONTEXT: Record<LifeStageKey, string> = {
+  "newborn-0-5mo":
+    "This person is a newborn (0-5 months). Plate scan does not apply at this age — infants are exclusively breast/formula-fed. If a photo is submitted for this profile, still identify any food visible and return standard nutrients, but flag any solid food with 'suitability: caution' and a 'risk' note explaining solids typically begin at 6 months.",
   "6-8mo":
     "This person is a 6-8 month old baby starting solids. Highlight foods rich in iron, zinc, protein, and DHA. Note choking hazards and honey risk under 12 months.",
   "9-11mo":
