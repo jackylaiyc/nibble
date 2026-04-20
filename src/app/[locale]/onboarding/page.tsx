@@ -19,6 +19,7 @@ import {
   ALLERGENS,
   type AllergenKey,
 } from "@/lib/pediatric/allergenRegistry";
+import { NutrientPreviewCard } from "@/components/nutrition/NutrientPreviewCard";
 
 /**
  * Onboarding — DOB-first flow.
@@ -478,24 +479,36 @@ function Step2Dob({
       </div>
 
       {ageInfo && (
-        <div className="rounded-card bg-sage/20 border border-sage/40 p-5">
-          <p className="text-sm font-medium text-sage-deep">
-            {ageInfo.months < 24
-              ? t("dobPreviewMonths", { months: ageInfo.months })
-              : t("dobPreviewYears", {
-                  years: ageInfo.years,
-                  months: ageInfo.months % 12,
-                })}
-          </p>
-          <p className="mt-1 text-lg font-display font-semibold text-ink">
-            {t("dobBucket", { bucket: AGE_BUCKET_LABELS[ageInfo.bucket][locale] })}
-          </p>
-          {!ageInfo.isSupportedAge && (
-            <p className="mt-3 text-sm text-warning">
-              {t("dobUnsupported")}
+        <>
+          <div className="rounded-card bg-sage/20 border border-sage/40 p-5">
+            <p className="text-sm font-medium text-sage-deep">
+              {ageInfo.months < 24
+                ? t("dobPreviewMonths", { months: ageInfo.months })
+                : t("dobPreviewYears", {
+                    years: ageInfo.years,
+                    months: ageInfo.months % 12,
+                  })}
             </p>
+            <p className="mt-1 text-lg font-display font-semibold text-ink">
+              {t("dobBucket", { bucket: AGE_BUCKET_LABELS[ageInfo.bucket][locale] })}
+            </p>
+            {!ageInfo.isSupportedAge && (
+              <p className="mt-3 text-sm text-warning">
+                {t("dobUnsupported")}
+              </p>
+            )}
+          </div>
+          {/* Nutrient preview — shows that a 9-month-old's targets differ
+              meaningfully from a 4-year-old's or an 11-year-old's. The list
+              changes live as the parent adjusts the DOB picker. */}
+          {ageInfo.isSupportedAge && (
+            <NutrientPreviewCard
+              stageKey={ageInfo.bucket}
+              stageLabel={AGE_BUCKET_LABELS[ageInfo.bucket][locale]}
+              locale={locale}
+            />
           )}
-        </div>
+        </>
       )}
     </div>
   );
@@ -766,24 +779,30 @@ function Step0KindPicker({
       emoji: "👶",
       titleEn: "A baby or child (6mo–13yr)",
       titleZh: "寶寶或孩子（6 個月–13 歲）",
-      subEn: "Eating solids. Track iron, zinc, DHA, calcium & more.",
-      subZh: "已開始吃副食品，追蹤鐵、鋅、DHA、鈣等關鍵營養。",
+      subEn:
+        "Eating solids. Nutrient targets shift as they grow — iron & DHA for babies, calcium & protein for pre-teens.",
+      subZh:
+        "已開始吃副食品。營養重點隨年齡變化：嬰兒重視鐵與 DHA，學齡前後強調鈣與蛋白質。",
     },
     {
       key: "pregnant",
       emoji: "🤰",
       titleEn: "I'm pregnant",
       titleZh: "我正在懷孕",
-      subEn: "My own nutrition. Folate, iron, DHA + alcohol / caffeine alerts.",
-      subZh: "媽媽自己的營養：葉酸、鐵、DHA，提醒避免酒精與過量咖啡因。",
+      subEn:
+        "My own nutrition. Trimester-aware: folate (T1), iron & DHA (T2/T3), plus alcohol & caffeine alerts.",
+      subZh:
+        "媽媽自己的營養：各孕期重點不同（第一孕期葉酸、第二、三孕期鐵與 DHA），提醒避免酒精與過量咖啡因。",
     },
     {
       key: "breastfeeding",
       emoji: "🤱",
       titleEn: "I'm breastfeeding",
       titleZh: "我正在哺乳",
-      subEn: "My own nutrition. Iodine, DHA, calcium + caffeine alerts.",
-      subZh: "媽媽自己的營養：碘、DHA、鈣，留意咖啡因與哺乳前的酒精。",
+      subEn:
+        "My own nutrition. Iodine is the peak lifetime target, plus DHA, calcium & caffeine alerts.",
+      subZh:
+        "媽媽自己的營養：碘需求達人生高峰，還有 DHA、鈣與咖啡因提醒。",
     },
   ];
   return (
@@ -873,26 +892,42 @@ function Step2PregnancyDueDate({
         />
       </div>
       {preview && (
-        <div className="rounded-card bg-sage/20 border border-sage/40 p-5">
-          <p className="text-sm font-medium text-sage-deep">
-            {L(
-              `You're about ${preview.weeks} weeks pregnant.`,
-              `您目前約懷孕 ${preview.weeks} 週。`,
+        <>
+          <div className="rounded-card bg-sage/20 border border-sage/40 p-5">
+            <p className="text-sm font-medium text-sage-deep">
+              {L(
+                `You're about ${preview.weeks} weeks pregnant.`,
+                `您目前約懷孕 ${preview.weeks} 週。`,
+              )}
+            </p>
+            <p className="mt-1 text-lg font-display font-semibold text-ink">
+              {L(
+                `Trimester ${preview.trimester}`,
+                `第 ${preview.trimester === 1 ? "一" : preview.trimester === 2 ? "二" : "三"} 孕期`,
+              )}
+            </p>
+            <p className="mt-2 text-xs text-ink-faded">
+              {L(
+                "Targets shift each trimester — T1 highlights folate for neural tube development, T2/T3 focus on iron, DHA, and choline.",
+                "每個孕期重點不同：第一孕期強調葉酸（神經管發育），第二、三孕期則聚焦鐵、DHA 與膽鹼。",
+              )}
+            </p>
+          </div>
+          <NutrientPreviewCard
+            stageKey={
+              preview.trimester === 1
+                ? "pregnant-T1"
+                : preview.trimester === 2
+                  ? "pregnant-T2"
+                  : "pregnant-T3"
+            }
+            stageLabel={L(
+              `Pregnancy · Trimester ${preview.trimester}`,
+              `懷孕 · 第 ${preview.trimester === 1 ? "一" : preview.trimester === 2 ? "二" : "三"} 孕期`,
             )}
-          </p>
-          <p className="mt-1 text-lg font-display font-semibold text-ink">
-            {L(
-              `Trimester ${preview.trimester}`,
-              `第 ${preview.trimester === 1 ? "一" : preview.trimester === 2 ? "二" : "三"} 孕期`,
-            )}
-          </p>
-          <p className="mt-2 text-xs text-ink-faded">
-            {L(
-              "Daily targets adjust each trimester — you'll see updated rings the moment you log your first meal.",
-              "每個孕期的營養目標會自動調整，您記錄第一餐時就會看到更新後的指標。",
-            )}
-          </p>
-        </div>
+            locale={locale}
+          />
+        </>
       )}
     </div>
   );
@@ -944,19 +979,44 @@ function Step2LactationStart({
         />
       </div>
       {preview && (
-        <div className="rounded-card bg-sage/20 border border-sage/40 p-5">
-          <p className="text-sm font-medium text-sage-deep">
-            {L(
-              `${preview.months} months postpartum (${preview.weeks} weeks).`,
-              `產後 ${preview.months} 個月（${preview.weeks} 週）。`,
-            )}
-          </p>
-          <p className="mt-1 text-lg font-display font-semibold text-ink">
-            {preview.months < 7
-              ? L("0-6 month phase — higher calorie needs", "0-6 個月階段 — 熱量需求較高")
-              : L("7+ month phase", "7 個月以上階段")}
-          </p>
-        </div>
+        <>
+          <div className="rounded-card bg-sage/20 border border-sage/40 p-5">
+            <p className="text-sm font-medium text-sage-deep">
+              {L(
+                `${preview.months} months postpartum (${preview.weeks} weeks).`,
+                `產後 ${preview.months} 個月（${preview.weeks} 週）。`,
+              )}
+            </p>
+            <p className="mt-1 text-lg font-display font-semibold text-ink">
+              {preview.months < 7
+                ? L("0–6 month phase", "產後 0–6 個月階段")
+                : L("7+ month phase", "產後 7 個月以上")}
+            </p>
+            <p className="mt-2 text-xs text-ink-faded">
+              {L(
+                "Lactation priorities differ from pregnancy — iodine becomes the top target (transfers to milk), while iron drops back to non-pregnant levels.",
+                "哺乳期重點與懷孕期不同：碘成為首要（會進入母乳），鐵則回到非孕期水準。",
+              )}
+            </p>
+          </div>
+          <NutrientPreviewCard
+            stageKey={
+              preview.months < 7 ? "lactation-0-6mo" : "lactation-7+mo"
+            }
+            stageLabel={
+              preview.months < 7
+                ? L(
+                    "Breastfeeding · 0–6 months",
+                    "哺乳 · 產後 0–6 個月",
+                  )
+                : L(
+                    "Breastfeeding · 7+ months",
+                    "哺乳 · 產後 7 個月以上",
+                  )
+            }
+            locale={locale}
+          />
+        </>
       )}
     </div>
   );
