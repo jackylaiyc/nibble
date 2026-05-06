@@ -1,7 +1,7 @@
 import createIntlMiddleware from "next-intl/middleware";
-import { routing } from "./src/i18n/routing";
+import { routing } from "./i18n/routing";
 import { type NextRequest } from "next/server";
-import { updateSession } from "./src/lib/supabase/middleware";
+import { updateSession } from "./lib/supabase/middleware";
 
 const intlMiddleware = createIntlMiddleware(routing);
 
@@ -20,6 +20,11 @@ const intlMiddleware = createIntlMiddleware(routing);
  * The matcher excludes `/auth/*` so the OAuth callback (/auth/callback)
  * doesn't get locale-rewritten — Google's redirect URI is registered as a
  * locale-free path and mustn't turn into /zh-TW/auth/callback.
+ *
+ * IMPORTANT: this file MUST live at src/middleware.ts (not the project root)
+ * because the project uses the src/ directory layout. `next dev` only picks
+ * up middleware at src/middleware.ts in that case; a root-level file is
+ * silently ignored in dev (though older docs claimed both worked).
  */
 export default async function middleware(request: NextRequest) {
   const supabaseResponse = await updateSession(request);
