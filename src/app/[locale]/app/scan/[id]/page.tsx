@@ -559,7 +559,7 @@ function FoodInsightCard({
             onClick={onEditPortion}
             className="w-full py-2 px-3 rounded-card border border-border text-xs font-medium text-ink-soft hover:border-peach-deep hover:text-peach-deep transition"
           >
-            {locale === "en" ? "✏️ Edit portion" : "✏️ 調整份量"}
+            {locale === "en" ? "⚖️ Adjust amount" : "⚖️ 調整實際吃了多少"}
           </button>
         </div>
       )}

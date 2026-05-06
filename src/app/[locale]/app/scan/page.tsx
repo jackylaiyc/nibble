@@ -7,6 +7,7 @@ import { useChildProfileStore } from "@/stores/childProfileStore";
 import { useMealStore, type FoodItem, type PortionUnit } from "@/stores/mealStore";
 import { useScanIntakeStore } from "@/stores/scanIntakeStore";
 import { sumFoodTotals } from "@/lib/nutrition/sumFoodTotals";
+import { scaleFoodPortion } from "@/lib/nutrition/scalePortion";
 import { PortionEditSheet } from "@/components/scan/PortionEditSheet";
 import { AddFoodSheet } from "@/components/scan/AddFoodSheet";
 import { getLifeStage, type AgeBucket } from "@/lib/pediatric/ageBucket";
@@ -420,6 +421,39 @@ export default function ScanPage() {
     setAddFoodOpen(false);
   }
 
+  // Meal-level scaler — multiply every food's portion + grams + nutrients
+  // by the same factor. The caregiver tapped "I ate half" so we shrink
+  // ALL foods proportionally rather than asking them to edit each one.
+  // This is the bulk version of replaceFoodAt's per-food re-scale.
+  function scaleAllFoods(ratio: number) {
+    setResult((prev) => {
+      if (!prev) return prev;
+      const foods = prev.foods.map((f) => {
+        const base = f.gramsEstimate || 0;
+        const newGrams = base * ratio;
+        const newAmount =
+          Math.round((f.portionAmount || 1) * ratio * 100) / 100;
+        const scaled = scaleFoodPortion(
+          f as FoodItem,
+          newGrams,
+          newAmount,
+          f.portionUnit,
+        );
+        // Merge the scaled values back onto the original entry rather than
+        // replacing it — that keeps required-but-optional-on-FoodItem fields
+        // (nameEn, source, allergensPresent) on the API-response shape.
+        return {
+          ...f,
+          portionAmount: scaled.portionAmount,
+          portionUnit: scaled.portionUnit,
+          gramsEstimate: scaled.gramsEstimate,
+          nutrients: scaled.nutrients,
+        };
+      });
+      return { foods, totals: sumFoodTotals(foods as FoodItem[]) };
+    });
+  }
+
   // ─── derived state ─────────────────────────────────────────────────────
   // Hooks live above the early returns so React sees a stable call order.
   // Each useMemo tolerates a null activeChild by returning an empty result —
@@ -605,6 +639,42 @@ export default function ScanPage() {
               </div>
             )}
 
+            {/* Meal-level "how much did you eat?" quick scaler. Tapping a
+                preset multiplies every food's grams + nutrients by that
+                ratio at once. Per-food fine-tuning still lives on each
+                food card below. */}
+            <div className="rounded-card bg-white card-pop p-4 space-y-3">
+              <div>
+                <p className="font-display font-semibold text-ink text-sm">
+                  {locale === "en"
+                    ? "How much of this meal did you eat?"
+                    : "這頓你吃了多少？"}
+                </p>
+                <p className="text-xs text-ink-faded mt-0.5">
+                  {locale === "en"
+                    ? "Pick a quick ratio to scale every food at once. Or fine-tune per food below."
+                    : "選一個比例調整全部食物。也可以下方各別微調。"}
+                </p>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: "¼", ratio: 0.25 },
+                  { label: "½", ratio: 0.5 },
+                  { label: "¾", ratio: 0.75 },
+                  { label: locale === "en" ? "All" : "全部", ratio: 1 },
+                ].map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => scaleAllFoods(p.ratio)}
+                    className="py-2 rounded-full bg-cream border border-border hover:border-peach-deep hover:bg-peach/10 text-sm font-semibold text-ink transition"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Foods with insights */}
             <div>
               <h2 className="font-display font-semibold text-ink mb-1">
@@ -612,8 +682,8 @@ export default function ScanPage() {
               </h2>
               <p className="text-xs text-ink-faded mb-3">
                 {locale === "en"
-                  ? "Tap a food to tweak the portion or remove it."
-                  : "點選食物可調整份量或刪除。"}
+                  ? "Tap a food to fine-tune the amount or remove it."
+                  : "點選食物可微調份量或刪除。"}
               </p>
               <ul className="space-y-3">
                 {result.foods.map((food, i) => {
@@ -699,7 +769,7 @@ export default function ScanPage() {
                           onClick={() => setEditingFoodIdx(i)}
                           className="flex-1 py-2 px-3 rounded-card border border-border text-xs font-medium text-ink-soft hover:border-peach-deep hover:text-peach-deep transition"
                         >
-                          {locale === "en" ? "✏️ Edit portion" : "✏️ 調整份量"}
+                          {locale === "en" ? "⚖️ Adjust amount" : "⚖️ 調整實際吃了多少"}
                         </button>
                         <button
                           type="button"

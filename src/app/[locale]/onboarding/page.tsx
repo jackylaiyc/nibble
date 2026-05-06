@@ -23,9 +23,24 @@ import {
  * gets a sensible default and can be edited later from the dashboard.
  */
 
-type SlideKey = "welcome" | "snap" | "analyze" | "targets" | "ask" | "setup";
+type SlideKey =
+  | "welcome"
+  | "snap"
+  | "analyze"
+  | "portion"
+  | "targets"
+  | "ask"
+  | "setup";
 
-const SLIDES: SlideKey[] = ["welcome", "snap", "analyze", "targets", "ask", "setup"];
+const SLIDES: SlideKey[] = [
+  "welcome",
+  "snap",
+  "analyze",
+  "portion",
+  "targets",
+  "ask",
+  "setup",
+];
 
 // Avatar to attach to the new profile based on kind. Caregivers can
 // change this from the profile screen later.
@@ -139,6 +154,7 @@ export default function OnboardingPage() {
         {slide === "welcome" && <WelcomeSlide locale={locale} />}
         {slide === "snap" && <SnapSlide locale={locale} />}
         {slide === "analyze" && <AnalyzeSlide locale={locale} />}
+        {slide === "portion" && <PortionSlide locale={locale} />}
         {slide === "targets" && <TargetsSlide locale={locale} />}
         {slide === "ask" && <AskSlide locale={locale} />}
         {slide === "setup" && (
@@ -266,41 +282,133 @@ function SnapSlide({ locale }: { locale: "en" | "zh-TW" }) {
 }
 
 function AnalyzeSlide({ locale }: { locale: "en" | "zh-TW" }) {
+  // 19 tracked nutrients across macros, vitamins, minerals, omega-3s,
+  // and exposure trackers (caffeine, alcohol). Showing a curated mix
+  // here so the slide reads "we cover everything," not just headline
+  // micronutrients.
+  const chips = locale === "en"
+    ? [
+        { emoji: "🔥", label: "Calories", pct: 64, color: "#f5cf66" },
+        { emoji: "🥩", label: "Protein", pct: 88, color: "#e6a87c" },
+        { emoji: "🌾", label: "Fiber", pct: 52, color: "#a8d5ba" },
+        { emoji: "⚙️", label: "Iron", pct: 72, color: "#6fb38a" },
+        { emoji: "🦴", label: "Calcium", pct: 91, color: "#a8d5ba" },
+        { emoji: "🐟", label: "DHA", pct: 48, color: "#86b7e8" },
+      ]
+    : [
+        { emoji: "🔥", label: "熱量", pct: 64, color: "#f5cf66" },
+        { emoji: "🥩", label: "蛋白質", pct: 88, color: "#e6a87c" },
+        { emoji: "🌾", label: "纖維", pct: 52, color: "#a8d5ba" },
+        { emoji: "⚙️", label: "鐵", pct: 72, color: "#6fb38a" },
+        { emoji: "🦴", label: "鈣", pct: 91, color: "#a8d5ba" },
+        { emoji: "🐟", label: "DHA", pct: 48, color: "#86b7e8" },
+      ];
   return (
     <SlideShell
       emoji="✨"
-      title={locale === "en" ? "AI breaks it down" : "AI 秒懂營養"}
+      title={locale === "en" ? "AI breaks it all down" : "AI 全方位分析"}
       body={
         locale === "en"
-          ? "Iron, calcium, DHA, folate — every nutrient that matters, in seconds."
-          : "鐵、鈣、DHA、葉酸——所有重要營養素，幾秒鐘搞定。"
+          ? "Calories, protein, fiber, every vitamin and mineral, omega-3s — 19 nutrients, calculated in seconds."
+          : "熱量、蛋白質、纖維、所有維生素與礦物質、Omega-3——共 19 項營養素，幾秒鐘搞定。"
       }
     >
-      <div className="mt-8 mx-auto max-w-xs grid grid-cols-3 gap-3 text-xs">
-        <NutrientChip emoji="⚙️" label={locale === "en" ? "Iron" : "鐵"} pct={72} color="#6fb38a" />
-        <NutrientChip emoji="🦴" label={locale === "en" ? "Calcium" : "鈣"} pct={91} color="#a8d5ba" />
-        <NutrientChip emoji="🐟" label="DHA" pct={48} color="#f5cf66" />
+      <div className="mt-8 mx-auto max-w-xs grid grid-cols-3 gap-2 text-xs">
+        {chips.map((c) => (
+          <NutrientChip key={c.label} {...c} />
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-ink-faded">
+        {locale === "en" ? "+ 13 more tracked" : "另加 13 項持續追蹤"}
+      </p>
+    </SlideShell>
+  );
+}
+
+function PortionSlide({ locale }: { locale: "en" | "zh-TW" }) {
+  const presets = [
+    { label: "¼", on: false },
+    { label: "½", on: true },
+    { label: "¾", on: false },
+    { label: "1×", on: false },
+  ];
+  return (
+    <SlideShell
+      emoji="⚖️"
+      title={locale === "en" ? "Didn't finish? No problem." : "沒吃完？沒關係。"}
+      body={
+        locale === "en"
+          ? "Tap a food and adjust the amount — by serving (¼, ½, ¾, 1×) or by exact weight in grams. Nutrients re-scale to what you actually ate."
+          : "點任何一樣食物調整份量——選比例（¼、½、¾、1×）或直接輸入克數。營養素會依實際攝取量重新計算。"
+      }
+    >
+      <div className="mt-8 mx-auto max-w-xs rounded-bubble bg-white card-pop p-4 text-left">
+        <p className="text-xs text-ink-faded mb-2">
+          {locale === "en" ? "How much did you eat?" : "你吃了多少？"}
+        </p>
+        <div className="flex gap-2 mb-3">
+          {presets.map((p) => (
+            <span
+              key={p.label}
+              className={`flex-1 text-center py-2 rounded-full text-sm font-semibold border ${
+                p.on
+                  ? "bg-peach text-white border-peach"
+                  : "bg-cream text-ink-faded border-border"
+              }`}
+            >
+              {p.label}
+            </span>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="flex-1 px-3 py-2 rounded-card bg-cream text-ink tabular-nums">
+            120
+          </span>
+          <span className="text-ink-faded">g</span>
+        </div>
       </div>
     </SlideShell>
   );
 }
 
 function TargetsSlide({ locale }: { locale: "en" | "zh-TW" }) {
+  // Show a small mix of "covered" and "needs more" badges so the slide
+  // reads as a real day rather than a perfect-score celebration.
+  const badges = locale === "en"
+    ? [
+        { tone: "good" as const, text: "Protein · 100%" },
+        { tone: "good" as const, text: "Calcium · 95%" },
+        { tone: "warn" as const, text: "Iron · 60%" },
+      ]
+    : [
+        { tone: "good" as const, text: "蛋白質 · 100%" },
+        { tone: "good" as const, text: "鈣 · 95%" },
+        { tone: "warn" as const, text: "鐵 · 60%" },
+      ];
   return (
     <SlideShell
       emoji="🎯"
       title={locale === "en" ? "Daily targets, made visible" : "每日目標，一目了然"}
       body={
         locale === "en"
-          ? "Each meal you scan adds to today's totals. See at a glance whether the day's covered."
-          : "每一餐都會累加到今天的進度，是否補夠了，一眼就懂。"
+          ? "Each meal adds to the day's totals. See at a glance which nutrients are covered and which need a top-up."
+          : "每一餐都會累加到今天的進度。哪些補夠了、哪些還差一點，一眼就懂。"
       }
     >
-      <div className="mt-8 inline-flex items-center gap-3 px-4 py-2 rounded-full bg-sage/30 border border-sage-deep/30">
-        <span className="text-lg">✅</span>
-        <span className="text-sm font-medium text-sage-deep">
-          {locale === "en" ? "Iron · 100% of today" : "鐵 · 今日 100%"}
-        </span>
+      <div className="mt-8 flex flex-col gap-2 items-center">
+        {badges.map((b) => (
+          <span
+            key={b.text}
+            className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-sm font-medium ${
+              b.tone === "good"
+                ? "bg-sage/30 border-sage-deep/30 text-sage-deep"
+                : "bg-butter/40 border-butter-deep/30 text-ink"
+            }`}
+          >
+            <span className="text-base">{b.tone === "good" ? "✅" : "🌱"}</span>
+            {b.text}
+          </span>
+        ))}
       </div>
     </SlideShell>
   );
