@@ -82,7 +82,17 @@ export async function POST(request: NextRequest) {
           ],
           generationConfig: {
             temperature: 0.1,          // numbers must be read exactly, no creativity
-            maxOutputTokens: 2048,
+            // gemini-2.5-flash uses thinking by default and "thinking" tokens
+            // count against maxOutputTokens. For pure OCR we don't need
+            // reasoning — disable it so the full token budget goes to the
+            // JSON we actually want. Without this the model burns ~1.5k
+            // tokens thinking and the output truncates mid-object (the
+            // observed bug: response cut off at `"iron` with no `}`).
+            thinkingConfig: { thinkingBudget: 0 },
+            maxOutputTokens: 4096,
+            // Tell the model to emit JSON directly so it doesn't wrap the
+            // payload in markdown fences that the parser then has to strip.
+            responseMimeType: "application/json",
           },
         }),
       },
@@ -132,6 +142,23 @@ export async function POST(request: NextRequest) {
   }
 
   const food = toFoodItem(parsed, body);
+  if (!food) {
+    // toFoodItem returns null when the parsed payload says readable=false
+    // OR when no recognised nutrient field had a numeric value. Don't
+    // pretend success — the client treats `found:true,food:null` as a
+    // crash, and the user sees no useful error.
+    console.error(
+      "[nutrition-label] no usable food extracted. parsed:",
+      JSON.stringify(parsed).slice(0, 300),
+    );
+    return NextResponse.json({
+      found: false,
+      reason:
+        parsed.readable === false
+          ? "Label not readable — try a clearer, well-lit photo"
+          : "No nutrients found on the label",
+    });
+  }
   return NextResponse.json({ found: true, food });
 }
 
