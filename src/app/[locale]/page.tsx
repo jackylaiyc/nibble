@@ -132,12 +132,8 @@ export default function LandingPage({
             {[
               { emoji: "📸", key: "feature1" },
               { emoji: "💬", key: "feature2" },
-              { emoji: "💩", key: "feature3" },
-              { emoji: "😴", key: "feature4" },
-              { emoji: "🎉", key: "feature5" },
-              { emoji: "⚠️", key: "feature6" },
-              { emoji: "📈", key: "feature7" },
-              { emoji: "💌", key: "feature8" },
+              { emoji: "🎯", key: "feature3" },
+              { emoji: "💌", key: "feature4" },
             ].map(({ emoji, key }) => (
               <div
                 key={key}
@@ -145,7 +141,7 @@ export default function LandingPage({
               >
                 <div className="text-3xl mb-2">{emoji}</div>
                 <p className="font-medium text-sm text-ink">
-                  {t(key as "feature1" | "feature2" | "feature3" | "feature4" | "feature5" | "feature6" | "feature7" | "feature8")}
+                  {t(key as "feature1" | "feature2" | "feature3" | "feature4")}
                 </p>
               </div>
             ))}

@@ -12,7 +12,8 @@ import {
  *
  * We deliberately avoid streaming for MVP to keep tool-call plumbing simple.
  * A single turn returns either:
- *   - text + an optional toolCall (log a meal / poop / etc.), or
+ *   - text + an optional `log_meal` toolCall that deep-links the caregiver to
+ *     /app/scan to capture the meal, or
  *   - a pediatrician-referral hard refusal when the message hits medical-risk
  *     keywords that the system prompt is instructed to redirect.
  *
@@ -99,8 +100,6 @@ YOU MAY DISCUSS
 - Iron / zinc / calcium / vitamin D / DHA / protein / fiber — what foods are rich in them, WHO/AAP targets, how to bridge a gap.
 - Introducing common allergens early (AAP guidance on peanut, egg at 4–6 months for at-risk infants, etc.) as general education.
 - Picky-eating strategies, mealtime environment, division of responsibility.
-- General poop consistency norms (without interpreting any specific warning signs).
-- Milestone expectations by age as general education.
 - Food safety: choking hazards, whole nuts, honey <12 mo, raw fish, etc.
 - Feeding tools, utensils, high-chair recommendations.
 - Cultural feeding practices (HK/TW/SG — 副食品, 寶寶粥, 手指食物, 米麩).
@@ -118,8 +117,7 @@ ACTIONS (TOOL CALLS)
 ========================
 When the caregiver clearly wants to record something, call the matching tool instead of replying with text. Set a ${locale === "en" ? "confirmation" : "確認"} message AFTER the tool call via the follow-up turn, not before. Examples:
 - "記錄一下早餐，寶寶吃了蛋黃和南瓜泥" → log_meal
-- "今天便便是黃色軟軟的，正常嗎？" → log_poop (with a gentle educational note about Bristol norms)
-- "寶寶長了第一顆牙！" → log_milestone (celebrate!)
+- "今晚我吃了很多牛肉！" → log_meal (record into the day's nutrition tally)
 
 ========================
 NOTE
@@ -152,97 +150,6 @@ const toolDeclarations = [
         notes: { type: "STRING" },
       },
       required: ["mealType", "foods", "date", "time"],
-    },
-  },
-  {
-    name: "log_poop",
-    description:
-      "Record a diaper/poop event. Use when caregiver describes a poop — color, consistency, Bristol type, etc. Do NOT interpret warning colors; the app surfaces the banner separately.",
-    parameters: {
-      type: "OBJECT",
-      properties: {
-        bristolType: { type: "INTEGER", description: "1–7; null if not discernible" },
-        color: {
-          type: "STRING",
-          enum: ["yellow", "green", "brown", "black", "red", "white", "other"],
-        },
-        notes: { type: "STRING" },
-        date: { type: "STRING" },
-        time: { type: "STRING" },
-      },
-      required: ["date", "time"],
-    },
-  },
-  {
-    name: "log_sleep",
-    description: "Record a nap or a night's sleep start/end.",
-    parameters: {
-      type: "OBJECT",
-      properties: {
-        kind: { type: "STRING", enum: ["nap", "night"] },
-        startedAt: { type: "STRING", description: "ISO 8601" },
-        endedAt: { type: "STRING", description: "ISO 8601, omit for an in-progress sleep" },
-        wakeCount: { type: "INTEGER" },
-        notes: { type: "STRING" },
-      },
-      required: ["kind", "startedAt"],
-    },
-  },
-  {
-    name: "log_milestone",
-    description:
-      "Unlock a developmental milestone. Caregiver-phrased: 'first tooth', 'first word', 'crawled today', 'drank from a cup on his own'. Celebrate in the confirmation text.",
-    parameters: {
-      type: "OBJECT",
-      properties: {
-        key: {
-          type: "STRING",
-          description:
-            "Canonical slug — first_tooth, sits_unassisted, crawls, first_word, first_step, drinks_from_cup, self_feeds, sleeps_through_night, waves_bye, etc.",
-        },
-        achievedOn: { type: "STRING", description: "YYYY-MM-DD" },
-        notes: { type: "STRING" },
-      },
-      required: ["key", "achievedOn"],
-    },
-  },
-  {
-    name: "log_reaction",
-    description:
-      "Write an audit entry for a suspected allergic reaction. Use when caregiver mentions hives, rash, swelling, vomiting, diarrhea near a new food — AND also separately trigger the pediatrician-referral flow via the text response.",
-    parameters: {
-      type: "OBJECT",
-      properties: {
-        food: { type: "STRING" },
-        allergenKey: {
-          type: "STRING",
-          enum: [
-            "milk", "egg", "peanut", "treeNut", "wheat", "soy", "fish",
-            "shellfish", "sesame", "shrimp", "crab", "buckwheat", "celery",
-          ],
-        },
-        symptoms: { type: "ARRAY", items: { type: "STRING" } },
-        severity: { type: "STRING", enum: ["mild", "moderate", "severe"] },
-        notes: { type: "STRING" },
-        date: { type: "STRING" },
-        time: { type: "STRING" },
-      },
-      required: ["food", "symptoms", "severity", "date", "time"],
-    },
-  },
-  {
-    name: "log_growth",
-    description: "Record a weight / height / head circumference measurement.",
-    parameters: {
-      type: "OBJECT",
-      properties: {
-        measuredOn: { type: "STRING", description: "YYYY-MM-DD" },
-        weightKg: { type: "NUMBER" },
-        heightCm: { type: "NUMBER" },
-        headCircumferenceCm: { type: "NUMBER" },
-        notes: { type: "STRING" },
-      },
-      required: ["measuredOn"],
     },
   },
 ];

@@ -37,14 +37,9 @@ import { getLifeStage } from "@/lib/pediatric/ageBucket";
 
 const TOOL_ROUTE_MAP: Record<
   string,
-  { href: "/app/scan" | "/app/poop/log" | "/app/sleep" | "/app/milestones" | "/app/reactions" | "/app/growth"; labelEn: string; labelZh: string; emoji: string }
+  { href: "/app/scan"; labelEn: string; labelZh: string; emoji: string }
 > = {
-  log_meal:      { href: "/app/scan",       labelEn: "Log this meal",     labelZh: "去記錄這餐",   emoji: "📸" },
-  log_poop:      { href: "/app/poop/log",   labelEn: "Log the diaper",    labelZh: "去記錄便便",   emoji: "💩" },
-  log_sleep:     { href: "/app/sleep",      labelEn: "Log sleep",         labelZh: "去記錄睡眠",   emoji: "😴" },
-  log_milestone: { href: "/app/milestones", labelEn: "Mark milestone",    labelZh: "去勾選里程碑", emoji: "🎉" },
-  log_reaction:  { href: "/app/reactions",  labelEn: "Log the reaction",  labelZh: "去記錄反應",   emoji: "⚠️" },
-  log_growth:    { href: "/app/growth",     labelEn: "Log measurement",   labelZh: "去記錄測量",   emoji: "📈" },
+  log_meal: { href: "/app/scan", labelEn: "Log this meal", labelZh: "去記錄這餐", emoji: "📸" },
 };
 
 // ─── page ─────────────────────────────────────────────────────────────────

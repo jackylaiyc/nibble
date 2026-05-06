@@ -13,8 +13,7 @@ import type { OgSize } from "@/lib/share/ogTemplates";
  * download on desktop / browsers without Web Share Level 2.
  *
  * Intentionally free of business logic — callers pass in whatever the
- * OG endpoint accepts. Keeps the button generic across milestone,
- * growth, and scan cards.
+ * OG endpoint accepts. Currently only used for plate-scan share cards.
  */
 
 type ShareParams = Record<string, string | number | undefined>;
@@ -27,7 +26,7 @@ export function ShareCardButton({
   filename = "nibble-card.png",
   className = "",
 }: {
-  type: "milestone" | "growth" | "scan";
+  type: "scan";
   params: ShareParams;
   label: string;
   size?: OgSize;

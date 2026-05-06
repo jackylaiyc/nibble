@@ -20,7 +20,6 @@ import {
 import { RDARing } from "@/components/pediatric/RDARing";
 import { DailySummaryCard } from "@/components/nutrition/DailySummaryCard";
 import { RecentFoodsStrip } from "@/components/nutrition/RecentFoodsStrip";
-import { BabyFeedCard } from "@/components/nutrition/BabyFeedCard";
 import { ScanSourceSheet } from "@/components/scan/ScanSourceSheet";
 import { ProfileSwitcher } from "@/components/layout/ProfileSwitcher";
 import { buildRecentFoods } from "@/lib/nutrition/recentFoods";
@@ -40,9 +39,7 @@ import {
 
 const QUICK_LINKS = [
   { emoji: "💬", href: "/app/chat" as const, en: "Ask Nibble", zh: "問 Nibble" },
-  { emoji: "💩", href: "/app/poop/log" as const, en: "Poop log", zh: "便便紀錄" },
-  { emoji: "📏", href: "/app/growth" as const, en: "Growth", zh: "生長紀錄" },
-  { emoji: "⭐", href: "/app/milestones" as const, en: "Milestones", zh: "里程碑" },
+  { emoji: "📋", href: "/app/scan/history" as const, en: "Meal history", zh: "餐點紀錄" },
 ];
 
 export default function AppDashboard() {
@@ -230,29 +227,10 @@ export default function AppDashboard() {
           />
         )}
 
-        {/* Baby-feed tracker — shown for NEWBORN profiles (the baby's own
-            profile). Mom's breastfeeding profile shows HER nutrition only;
-            baby tracking lives on a separate newborn profile, reflecting the
-            caregiver's mental model ("this is tracking baby, not me").
-            The breastfeedingStartDate field on newborn profiles is populated
-            with the baby's DOB during onboarding so feeding benchmarks can
-            compute weeks-of-life. */}
-        {activeChild.kind === "newborn" && (
-          <BabyFeedCard
-            profileId={activeChild.id}
-            breastfeedingStartDate={
-              activeChild.breastfeedingStartDate ?? activeChild.dob
-            }
-            locale={locale}
-          />
-        )}
-
-        {/* Today's Nutrition Progress (hero) — hidden for newborn profiles
-            because 0-5mo babies self-regulate via milk and don't have
-            plate-scan-driven RDA targets. Everything below this block
-            (scan CTA, meals strip, recent foods) is also hidden for
-            newborns; their whole dashboard is the BabyFeedCard + quick links. */}
-        {activeChild.kind !== "newborn" && (<>
+        {/* Today's Nutrition Progress (hero) — Nibble is now a single-purpose
+            nutrition tracker. Every profile kind sees the same plate-scan-
+            driven RDA dashboard; we no longer special-case newborns since
+            baby-feed tracking was removed. */}
         <section className="rounded-bubble bg-white card-pop p-5">
           <h2 className="font-display font-semibold text-ink mb-1">
             {locale === "en" ? "Today's nutrition" : "今日營養"}
@@ -375,7 +353,6 @@ export default function AppDashboard() {
             </div>
           </section>
         )}
-        </>)}
 
         {/* Quick links */}
         <section>
