@@ -1,1116 +1,451 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
-import { useLocale, useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
+import { useLocale } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import {
   useChildProfileStore,
-  type FeedingStyle,
   type ProfileKind,
 } from "@/stores/childProfileStore";
-import {
-  AGE_BUCKET_LABELS,
-  ageInfoFromDob,
-  weeksPregnantFromDueDate,
-  trimesterFromWeeks,
-  weeksPostpartumFromStart,
-} from "@/lib/pediatric/ageBucket";
-import {
-  ALLERGENS,
-  type AllergenKey,
-} from "@/lib/pediatric/allergenRegistry";
-import { NutrientPreviewCard } from "@/components/nutrition/NutrientPreviewCard";
 
 /**
- * Onboarding — DOB-first flow.
+ * Onboarding — a 6-slide tutorial that ends with a one-line setup.
  *
- * 5 steps:
- *   1. Name + sex + avatar emoji
- *   2. Date of birth (age-bucket preview)
- *   3. Feeding style (BLW / purée / mixed)
- *   4. Known allergens (multi-select)
- *   5. Caregiver consent — legal layer 1 ("I understand this is educational")
+ * This used to be a multi-step form (name, sex, DOB, feeding style,
+ * allergens, consent). Most of those questions were friction without
+ * payoff: caregivers don't know their answers up-front and the app
+ * can compute reasonable defaults. So we flipped it: the onboarding
+ * teaches the app first, then asks for the bare minimum we need to
+ * compute daily RDA targets — a name and which life stage to track.
  *
- * State lives in local component state; only committed to the
- * childProfileStore on the final Finish tap. This lets the user back out
- * at any step without leaving a half-filled child record behind.
- *
- * Auth + Supabase sync come later; for MVP we lean on localStorage so
- * the flow works end-to-end without a logged-in user.
+ * Slides 1–5 are pure illustration (no inputs). Slide 6 is "let's go"
+ * with name + life-stage chips. Every other field on the Child record
+ * gets a sensible default and can be edited later from the dashboard.
  */
 
-type Step = 0 | 1 | 2 | 3 | 4 | 5;
+type SlideKey = "welcome" | "snap" | "analyze" | "targets" | "ask" | "setup";
 
-const TOTAL_STEPS = 6;          // Step 0 (kind picker) + Steps 1-5
+const SLIDES: SlideKey[] = ["welcome", "snap", "analyze", "targets", "ask", "setup"];
 
-const AVATAR_CHOICES = ["🍎", "🍑", "🍐", "🥑", "🥕", "🫐", "🌸", "🐻", "🦊", "🐣", "🤰", "🤱"] as const;
+// Avatar to attach to the new profile based on kind. Caregivers can
+// change this from the profile screen later.
+const KIND_AVATARS: Record<Exclude<ProfileKind, "newborn">, string> = {
+  infant: "🍎",
+  pregnant: "🤰",
+  breastfeeding: "🤱",
+};
 
-type Sex = "female" | "male" | "unspecified";
+// Today minus N days, formatted as YYYY-MM-DD.
+function isoDateOffset(daysFromToday: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromToday);
+  return d.toISOString().slice(0, 10);
+}
+
+// Sensible profile defaults so the user doesn't have to fill in dates.
+// They can edit these later if they're tracking precisely.
+function defaultDates(kind: Exclude<ProfileKind, "newborn">) {
+  if (kind === "infant") {
+    // 12 months old — lands in the 12-23mo bucket which has the broadest
+    // RDA targets. Caregivers with younger / older babies will edit.
+    return { dob: isoDateOffset(-365), pregnancyDueDate: undefined, breastfeedingStartDate: undefined };
+  }
+  if (kind === "pregnant") {
+    // Due date 20 weeks out → currently second trimester.
+    return { dob: isoDateOffset(0), pregnancyDueDate: isoDateOffset(140), breastfeedingStartDate: undefined };
+  }
+  // breastfeeding — 8 weeks postpartum → currently in the 0-6mo lactation bucket.
+  return { dob: isoDateOffset(0), pregnancyDueDate: undefined, breastfeedingStartDate: isoDateOffset(-56) };
+}
 
 export default function OnboardingPage() {
   const locale = useLocale() as "zh-TW" | "en";
-  const t = useTranslations("Onboarding");
-  const tCommon = useTranslations("Common");
   const router = useRouter();
   const addChild = useChildProfileStore((s) => s.addChild);
   const setActiveChild = useChildProfileStore((s) => s.setActiveChild);
   const loadFromStorage = useChildProfileStore((s) => s.loadFromStorage);
 
-  // Hydrate any existing store state so re-runs don't overwrite the first child.
+  // Hydrate so re-runs don't double-create a profile.
   useEffect(() => {
     loadFromStorage();
   }, [loadFromStorage]);
 
-  const [step, setStep] = useState<Step>(0);
-
-  // ─── New: profile kind discriminator ────────────────────────────────────
-  const [kind, setKind] = useState<ProfileKind>("infant");
-  const [pregnancyDueDate, setPregnancyDueDate] = useState<string>("");
-  const [breastfeedingStartDate, setBreastfeedingStartDate] = useState<string>("");
-
+  const [slideIdx, setSlideIdx] = useState(0);
   const [name, setName] = useState("");
-  const [sex, setSex] = useState<Sex>("unspecified");
-  const [avatar, setAvatar] = useState<string>(AVATAR_CHOICES[0]);
-  const [dob, setDob] = useState<string>(""); // YYYY-MM-DD (infant only)
-  const [feedingStyle, setFeedingStyle] = useState<FeedingStyle>("mixed");
-  const [allergens, setAllergens] = useState<AllergenKey[]>([]);
-  const [noneKnown, setNoneKnown] = useState(false);
-  const [consent, setConsent] = useState(false);
+  const [kind, setKind] = useState<Exclude<ProfileKind, "newborn">>("infant");
   const [saving, setSaving] = useState(false);
 
-  const ageInfo = useMemo(() => (dob ? ageInfoFromDob(dob) : null), [dob]);
-
-  // Pregnancy / breastfeeding live previews so the user sees their derived
-  // trimester / weeks-postpartum the moment they pick a date.
-  const pregnancyPreview = useMemo(() => {
-    if (kind !== "pregnant" || !pregnancyDueDate) return null;
-    const w = weeksPregnantFromDueDate(pregnancyDueDate);
-    return { weeks: w, trimester: trimesterFromWeeks(w) };
-  }, [kind, pregnancyDueDate]);
-
-  const lactationPreview = useMemo(() => {
-    if (kind !== "breastfeeding" || !breastfeedingStartDate) return null;
-    const w = weeksPostpartumFromStart(breastfeedingStartDate);
-    return { weeks: w, months: Math.floor(w / 4.345) };
-  }, [kind, breastfeedingStartDate]);
-
-  // Per-step gate for the Next button. Step 2's gate branches on the
-  // selected kind because each kind asks for a different date.
-  const canAdvance: Record<Step, boolean> = {
-    0: !!kind,
-    1: name.trim().length > 0,
-    2:
-      kind === "infant" || kind === "newborn"
-        ? !!dob && !Number.isNaN(new Date(dob).getTime())
-        : kind === "pregnant"
-          ? !!pregnancyDueDate && !Number.isNaN(new Date(pregnancyDueDate).getTime())
-          : !!breastfeedingStartDate &&
-            !Number.isNaN(new Date(breastfeedingStartDate).getTime()),
-    3: !!feedingStyle, // only reached for infants
-    4: true,
-    5: consent,
-  };
-
-  function toggleAllergen(key: AllergenKey) {
-    if (noneKnown) setNoneKnown(false);
-    setAllergens((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
-    );
-  }
-
-  function toggleNone() {
-    setNoneKnown((v) => !v);
-    if (!noneKnown) setAllergens([]);
-  }
+  const slide = SLIDES[slideIdx];
+  const isLast = slide === "setup";
+  const isFirst = slideIdx === 0;
 
   function next() {
-    if (!canAdvance[step]) return;
-    // Skip Step 3 (feeding style) for any non-infant kind — feeding style
-    // only applies to 6mo+ babies eating solids. Newborn / pregnant /
-    // breastfeeding all jump straight to allergens.
-    if (step === 2 && kind !== "infant") {
-      setStep(4);
-      return;
-    }
-    if (step === 5) {
-      finish();
-      return;
-    }
-    setStep((s) => (s + 1) as Step);
+    if (slideIdx < SLIDES.length - 1) setSlideIdx((i) => i + 1);
   }
 
-  function back() {
-    if (step === 0) return;
-    // Mirror the skip in reverse: from Step 4 for non-infants, back to 2.
-    if (step === 4 && kind !== "infant") {
-      setStep(2);
-      return;
-    }
-    setStep((s) => (s - 1) as Step);
+  function prev() {
+    if (slideIdx > 0) setSlideIdx((i) => i - 1);
+  }
+
+  function skipToSetup() {
+    setSlideIdx(SLIDES.length - 1);
   }
 
   async function finish() {
-    if (!consent || saving) return;
+    if (saving) return;
     setSaving(true);
-
-    // `dob` is required on Child for back-compat. For maternal profiles
-    // (pregnant / breastfeeding) it's semantically meaningless — we store
-    // today's ISO. For infant / newborn it's the baby's actual DOB.
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const storedDob =
-      kind === "infant" || kind === "newborn"
-        ? dob
-        : kind === "breastfeeding"
-          ? breastfeedingStartDate || todayIso
-          : todayIso;
-
-    const newId = addChild({
-      name: name.trim(),
-      kind,
-      dob: storedDob,
-      sex: kind === "infant" ? sex : undefined,
-      avatar,
-      feedingStyle: kind === "infant" ? feedingStyle : undefined,
-      pregnancyDueDate: kind === "pregnant" ? pregnancyDueDate : undefined,
-      // Newborn profiles double-populate breastfeedingStartDate with the
-      // baby's DOB so the BabyFeedCard benchmarks can compute weeks-of-life.
-      breastfeedingStartDate:
-        kind === "breastfeeding"
-          ? breastfeedingStartDate
-          : kind === "newborn"
-            ? dob
-            : undefined,
-      allergens: noneKnown ? [] : allergens,
-      notes: "",
-    });
-    setActiveChild(newId);
-    router.push("/app");
+    try {
+      const trimmed = name.trim();
+      const fallbackName = locale === "en" ? "Me" : "我";
+      const dates = defaultDates(kind);
+      const id = addChild({
+        name: trimmed || fallbackName,
+        avatar: KIND_AVATARS[kind],
+        allergens: [],
+        notes: "",
+        kind,
+        dob: dates.dob,
+        sex: "unspecified",
+        feedingStyle: kind === "infant" ? "mixed" : undefined,
+        pregnancyDueDate: dates.pregnancyDueDate,
+        breastfeedingStartDate: dates.breastfeedingStartDate,
+      });
+      setActiveChild(id);
+      router.replace("/app");
+    } catch (err) {
+      console.error("[onboarding] finish failed:", err);
+      setSaving(false);
+    }
   }
 
   return (
-    <main className="min-h-screen flex flex-col">
-      <ProgressBar step={step} />
-
-      <div className="flex-1 flex flex-col px-6 pt-8 pb-36 max-w-xl mx-auto w-full">
-        {step === 0 && (
-          <Step0KindPicker
-            locale={locale}
-            kind={kind}
-            setKind={(k) => {
-              setKind(k);
-              // Reset kind-specific fields so stale values can't leak.
-              setDob("");
-              setPregnancyDueDate("");
-              setBreastfeedingStartDate("");
-              // Switch to a kind-appropriate default avatar if still on the
-              // first apple — keeps the chosen kind visible at a glance.
-              if (avatar === AVATAR_CHOICES[0]) {
-                setAvatar(k === "pregnant" ? "🤰" : k === "breastfeeding" ? "🤱" : "🍎");
-              }
-            }}
-          />
-        )}
-        {step === 1 && (
-          <Step1NameSex
-            t={t}
-            name={name}
-            setName={setName}
-            sex={sex}
-            setSex={setSex}
-            avatar={avatar}
-            setAvatar={setAvatar}
-            kind={kind}
-          />
-        )}
-        {step === 2 && kind === "infant" && (
-          <Step2Dob
-            t={t}
-            locale={locale}
-            dob={dob}
-            setDob={setDob}
-            ageInfo={ageInfo}
-          />
-        )}
-        {step === 2 && kind === "newborn" && (
-          <Step2NewbornDob
-            locale={locale}
-            dob={dob}
-            setDob={setDob}
-          />
-        )}
-        {step === 2 && kind === "pregnant" && (
-          <Step2PregnancyDueDate
-            locale={locale}
-            dueDate={pregnancyDueDate}
-            setDueDate={setPregnancyDueDate}
-            preview={pregnancyPreview}
-          />
-        )}
-        {step === 2 && kind === "breastfeeding" && (
-          <Step2LactationStart
-            locale={locale}
-            startDate={breastfeedingStartDate}
-            setStartDate={setBreastfeedingStartDate}
-            preview={lactationPreview}
-          />
-        )}
-        {step === 3 && kind === "infant" && (
-          <Step3FeedingStyle
-            t={t}
-            feedingStyle={feedingStyle}
-            setFeedingStyle={setFeedingStyle}
-          />
-        )}
-        {step === 4 && (
-          <Step4Allergens
-            t={t}
-            locale={locale}
-            allergens={allergens}
-            toggle={toggleAllergen}
-            noneKnown={noneKnown}
-            toggleNone={toggleNone}
-          />
-        )}
-        {step === 5 && (
-          <Step5Consent t={t} consent={consent} setConsent={setConsent} />
+    <main className="min-h-screen bg-cream flex flex-col">
+      {/* Top bar — Skip on tutorial slides only */}
+      <div className="px-6 pt-6 flex items-center justify-between">
+        <span className="text-2xl">🍎</span>
+        {!isLast && (
+          <button
+            type="button"
+            onClick={skipToSetup}
+            className="text-sm text-ink-faded hover:text-ink"
+          >
+            {locale === "en" ? "Skip" : "略過"} →
+          </button>
         )}
       </div>
 
-      {/* Sticky footer nav */}
-      <nav className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-border px-6 py-4">
-        <div className="max-w-xl mx-auto flex items-center gap-3">
-          {step > 0 ? (
+      {/* Slide stage */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 text-center">
+        {slide === "welcome" && <WelcomeSlide locale={locale} />}
+        {slide === "snap" && <SnapSlide locale={locale} />}
+        {slide === "analyze" && <AnalyzeSlide locale={locale} />}
+        {slide === "targets" && <TargetsSlide locale={locale} />}
+        {slide === "ask" && <AskSlide locale={locale} />}
+        {slide === "setup" && (
+          <SetupSlide
+            locale={locale}
+            name={name}
+            setName={setName}
+            kind={kind}
+            setKind={setKind}
+          />
+        )}
+      </div>
+
+      {/* Bottom controls — dots + nav buttons */}
+      <div className="px-6 pb-10 space-y-6">
+        <div className="flex justify-center gap-2">
+          {SLIDES.map((s, i) => (
             <button
-              onClick={back}
-              className="flex-shrink-0 px-5 py-3 rounded-full text-ink-soft font-medium hover:text-ink transition"
+              key={s}
+              type="button"
+              onClick={() => setSlideIdx(i)}
+              aria-label={`Slide ${i + 1}`}
+              className={`h-2 rounded-full transition-all ${
+                i === slideIdx
+                  ? "w-8 bg-peach-deep"
+                  : "w-2 bg-border hover:bg-peach/40"
+              }`}
+            />
+          ))}
+        </div>
+
+        <div className="max-w-sm mx-auto flex gap-3">
+          {!isFirst && (
+            <button
+              type="button"
+              onClick={prev}
+              className="flex-1 py-3 rounded-full border border-border text-ink font-medium hover:border-peach-deep transition"
             >
-              ← {tCommon("back")}
+              ← {locale === "en" ? "Back" : "上一步"}
+            </button>
+          )}
+          {!isLast ? (
+            <button
+              type="button"
+              onClick={next}
+              className="flex-[2] py-3 rounded-full bg-peach-deep text-white font-semibold bubble-shadow hover:bg-peach-deep/90 transition"
+            >
+              {locale === "en" ? "Next" : "下一步"} →
             </button>
           ) : (
-            <span className="flex-shrink-0 w-[88px]" aria-hidden />
+            <button
+              type="button"
+              onClick={finish}
+              disabled={saving}
+              className="flex-[2] py-3 rounded-full bg-peach-deep text-white font-semibold bubble-shadow hover:bg-peach-deep/90 transition disabled:opacity-60"
+            >
+              {saving
+                ? locale === "en" ? "Setting up…" : "建立中⋯⋯"
+                : locale === "en" ? "Start tracking" : "開始追蹤"}
+            </button>
           )}
-
-          <button
-            onClick={next}
-            disabled={!canAdvance[step] || saving}
-            className="flex-1 px-8 py-4 rounded-full bg-peach-deep text-white font-semibold text-lg bubble-shadow hover:bg-peach-deep/90 disabled:bg-ink-faded disabled:cursor-not-allowed transition"
-          >
-            {saving
-              ? t("saving")
-              : step === 5
-                ? t("finish")
-                : tCommon("next")}
-          </button>
         </div>
-      </nav>
+      </div>
     </main>
   );
 }
 
-// ─── Progress bar ─────────────────────────────────────────────────────────
+/* ─── Individual slides ──────────────────────────────────────────────────── */
 
-function ProgressBar({ step }: { step: Step }) {
-  // User-facing step number is 1-based: Step 0 (kind picker) displays as "1 / 6".
-  const displayStep = step + 1;
-  const pct = (displayStep / TOTAL_STEPS) * 100;
-  return (
-    <div className="sticky top-0 z-20 bg-cream/90 backdrop-blur-md border-b border-border px-6 pt-5 pb-4">
-      <div className="max-w-xl mx-auto">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-ink-soft">
-            🍎 Nibble
-          </span>
-          <span className="text-xs text-ink-faded tabular-nums">
-            {displayStep} / {TOTAL_STEPS}
-          </span>
-        </div>
-        <div className="h-1.5 bg-border rounded-full overflow-hidden">
-          <div
-            className="h-full bg-peach-deep transition-all duration-300 ease-out rounded-full"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Step 1: name + sex + avatar ──────────────────────────────────────────
-
-function Step1NameSex({
-  t,
-  name,
-  setName,
-  sex,
-  setSex,
-  avatar,
-  setAvatar,
-  kind,
-}: {
-  t: ReturnType<typeof useTranslations<"Onboarding">>;
-  name: string;
-  setName: (s: string) => void;
-  sex: Sex;
-  setSex: (s: Sex) => void;
-  avatar: string;
-  setAvatar: (s: string) => void;
-  kind: ProfileKind;
-}) {
-  return (
-    <div className="space-y-8">
-      <StepHeader title={t("step1Title")} sub={t("step1Sub")} />
-
-      <div>
-        <label
-          htmlFor="child-name"
-          className="block text-sm font-medium text-ink mb-2"
-        >
-          {t("nameLabel")}
-        </label>
-        <input
-          id="child-name"
-          autoFocus
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={t("namePlaceholder")}
-          className="w-full px-5 py-4 rounded-card bg-white border border-border text-lg focus:outline-none focus:ring-2 focus:ring-peach-deep/40 focus:border-peach-deep transition"
-          maxLength={40}
-        />
-      </div>
-
-      <div>
-        <span className="block text-sm font-medium text-ink mb-2">
-          {t("avatarLabel")}
-        </span>
-        <div className="flex flex-wrap gap-2">
-          {AVATAR_CHOICES.map((emoji) => (
-            <button
-              key={emoji}
-              onClick={() => setAvatar(emoji)}
-              type="button"
-              className={`size-12 rounded-2xl text-2xl transition-all duration-200 ${
-                avatar === emoji
-                  ? "bg-peach/50 ring-2 ring-peach-deep scale-105"
-                  : "bg-white border border-border hover:bg-cream"
-              }`}
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {kind === "infant" && (
-        <div>
-          <span className="block text-sm font-medium text-ink mb-2">
-            {t("sexLabel")}
-          </span>
-          <div className="grid grid-cols-3 gap-2">
-            {(["female", "male", "unspecified"] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setSex(s)}
-                className={`px-4 py-3 rounded-card text-sm font-medium transition-all duration-200 ${
-                  sex === s
-                    ? "bg-sage/40 ring-2 ring-sage-deep text-ink"
-                    : "bg-white border border-border text-ink-soft hover:border-sage-deep"
-                }`}
-              >
-                {s === "female"
-                  ? t("sexFemale")
-                  : s === "male"
-                    ? t("sexMale")
-                    : t("sexUnspecified")}
-              </button>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-ink-faded">{t("sexHint")}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Step 2: DOB ──────────────────────────────────────────────────────────
-
-function Step2Dob({
-  t,
-  locale,
-  dob,
-  setDob,
-  ageInfo,
-}: {
-  t: ReturnType<typeof useTranslations<"Onboarding">>;
-  locale: "zh-TW" | "en";
-  dob: string;
-  setDob: (s: string) => void;
-  ageInfo: ReturnType<typeof ageInfoFromDob> | null;
-}) {
-  // Bound to today (no future DOBs) and 13 years back. Nibble supports
-  // 6mo–13yr inclusive via `child-9-13yr`; above 13 is teen/adult
-  // territory that lives in other products.
-  const today = new Date().toISOString().slice(0, 10);
-  const minDate = new Date();
-  minDate.setFullYear(minDate.getFullYear() - 13);
-  const min = minDate.toISOString().slice(0, 10);
-
-  return (
-    <div className="space-y-8">
-      <StepHeader title={t("step2Title")} sub={t("step2Sub")} />
-
-      <div>
-        <label
-          htmlFor="child-dob"
-          className="block text-sm font-medium text-ink mb-2"
-        >
-          {t("dobLabel")}
-        </label>
-        <input
-          id="child-dob"
-          type="date"
-          value={dob}
-          max={today}
-          min={min}
-          onChange={(e) => setDob(e.target.value)}
-          className="w-full px-5 py-4 rounded-card bg-white border border-border text-lg focus:outline-none focus:ring-2 focus:ring-peach-deep/40 focus:border-peach-deep transition"
-        />
-      </div>
-
-      {ageInfo && (
-        <>
-          <div className="rounded-card bg-sage/20 border border-sage/40 p-5">
-            <p className="text-sm font-medium text-sage-deep">
-              {ageInfo.months < 24
-                ? t("dobPreviewMonths", { months: ageInfo.months })
-                : t("dobPreviewYears", {
-                    years: ageInfo.years,
-                    months: ageInfo.months % 12,
-                  })}
-            </p>
-            <p className="mt-1 text-lg font-display font-semibold text-ink">
-              {t("dobBucket", { bucket: AGE_BUCKET_LABELS[ageInfo.bucket][locale] })}
-            </p>
-            {!ageInfo.isSupportedAge && (
-              <p className="mt-3 text-sm text-warning">
-                {t("dobUnsupported")}
-              </p>
-            )}
-          </div>
-          {/* Nutrient preview — shows that a 9-month-old's targets differ
-              meaningfully from a 4-year-old's or an 11-year-old's. The list
-              changes live as the parent adjusts the DOB picker. */}
-          {ageInfo.isSupportedAge && (
-            <NutrientPreviewCard
-              stageKey={ageInfo.bucket}
-              stageLabel={AGE_BUCKET_LABELS[ageInfo.bucket][locale]}
-              locale={locale}
-            />
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── Step 3: feeding style ────────────────────────────────────────────────
-
-function Step3FeedingStyle({
-  t,
-  feedingStyle,
-  setFeedingStyle,
-}: {
-  t: ReturnType<typeof useTranslations<"Onboarding">>;
-  feedingStyle: FeedingStyle;
-  setFeedingStyle: (s: FeedingStyle) => void;
-}) {
-  const choices: Array<{ key: FeedingStyle; titleKey: string; descKey: string; emoji: string }> = [
-    { key: "blw", titleKey: "feedingBlw", descKey: "feedingBlwDesc", emoji: "🖐️" },
-    { key: "puree", titleKey: "feedingPuree", descKey: "feedingPureeDesc", emoji: "🥄" },
-    { key: "mixed", titleKey: "feedingMixed", descKey: "feedingMixedDesc", emoji: "🍽️" },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <StepHeader title={t("step3Title")} sub={t("step3Sub")} />
-
-      <div className="space-y-3">
-        {choices.map(({ key, titleKey, descKey, emoji }) => {
-          const selected = feedingStyle === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setFeedingStyle(key)}
-              className={`w-full text-left flex items-start gap-4 p-5 rounded-card transition-all duration-200 ${
-                selected
-                  ? "bg-peach/30 ring-2 ring-peach-deep"
-                  : "bg-white border border-border hover:border-peach-deep"
-              }`}
-            >
-              <div className="text-3xl flex-shrink-0">{emoji}</div>
-              <div className="flex-1">
-                <p className="font-display font-semibold text-ink">
-                  {t(titleKey as Parameters<typeof t>[0])}
-                </p>
-                <p className="mt-1 text-sm text-ink-soft leading-relaxed">
-                  {t(descKey as Parameters<typeof t>[0])}
-                </p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ─── Step 4: allergens ────────────────────────────────────────────────────
-
-function Step4Allergens({
-  t,
-  locale,
-  allergens,
-  toggle,
-  noneKnown,
-  toggleNone,
-}: {
-  t: ReturnType<typeof useTranslations<"Onboarding">>;
-  locale: "zh-TW" | "en";
-  allergens: AllergenKey[];
-  toggle: (k: AllergenKey) => void;
-  noneKnown: boolean;
-  toggleNone: () => void;
-}) {
-  const top9 = ALLERGENS.filter((a) => !a.regional);
-  const regional = ALLERGENS.filter((a) => a.regional);
-
-  return (
-    <div className="space-y-6">
-      <StepHeader title={t("step4Title")} sub={t("step4Sub")} />
-
-      <button
-        type="button"
-        onClick={toggleNone}
-        className={`w-full flex items-center gap-3 p-4 rounded-card transition-all duration-200 ${
-          noneKnown
-            ? "bg-sage/30 ring-2 ring-sage-deep"
-            : "bg-white border border-border hover:border-sage-deep"
-        }`}
-      >
-        <div
-          className={`size-6 rounded-md flex items-center justify-center transition ${
-            noneKnown ? "bg-sage-deep text-white" : "bg-cream border border-border"
-          }`}
-        >
-          {noneKnown && "✓"}
-        </div>
-        <span className="font-medium text-ink">{t("allergensNone")}</span>
-      </button>
-
-      <div>
-        <p className="text-sm font-medium text-ink-soft mb-3">
-          {t("knownAllergensLabel")}
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          {top9.map((a) => (
-            <AllergenChip
-              key={a.key}
-              emoji={a.emoji}
-              label={a.label[locale]}
-              selected={allergens.includes(a.key) && !noneKnown}
-              disabled={noneKnown}
-              onClick={() => toggle(a.key)}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <p className="text-xs text-ink-faded mb-2">{t("allergensRegionalHint")}</p>
-        <div className="grid grid-cols-2 gap-2">
-          {regional.map((a) => (
-            <AllergenChip
-              key={a.key}
-              emoji={a.emoji}
-              label={a.label[locale]}
-              selected={allergens.includes(a.key) && !noneKnown}
-              disabled={noneKnown}
-              onClick={() => toggle(a.key)}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AllergenChip({
+function SlideShell({
   emoji,
-  label,
-  selected,
-  disabled,
-  onClick,
+  title,
+  body,
+  children,
 }: {
   emoji: string;
-  label: string;
-  selected: boolean;
-  disabled: boolean;
-  onClick: () => void;
+  title: string;
+  body: string;
+  children?: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className={`flex items-center gap-3 px-4 py-3 rounded-card text-sm font-medium transition-all duration-200 ${
-        selected
-          ? "bg-peach/40 ring-2 ring-peach-deep text-ink"
-          : "bg-white border border-border text-ink-soft hover:border-peach-deep"
-      } ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
-    >
-      <span className="text-xl">{emoji}</span>
-      <span>{label}</span>
-    </button>
-  );
-}
-
-// ─── Step 5: consent ──────────────────────────────────────────────────────
-
-function Step5Consent({
-  t,
-  consent,
-  setConsent,
-}: {
-  t: ReturnType<typeof useTranslations<"Onboarding">>;
-  consent: boolean;
-  setConsent: (v: boolean) => void;
-}) {
-  return (
-    <div className="space-y-6">
-      <StepHeader title={t("step5Title")} sub={t("step5Sub")} />
-
-      <div className="rounded-card bg-white border border-border p-6">
-        <p className="font-medium text-ink mb-4">{t("consentPrompt")}</p>
-        <ul className="space-y-3 text-sm text-ink-soft leading-relaxed">
-          <li className="flex gap-3">
-            <span className="flex-shrink-0 text-peach-deep font-bold">•</span>
-            <span>{t("consentItem1")}</span>
-          </li>
-          <li className="flex gap-3">
-            <span className="flex-shrink-0 text-peach-deep font-bold">•</span>
-            <span>{t("consentItem2")}</span>
-          </li>
-          <li className="flex gap-3">
-            <span className="flex-shrink-0 text-peach-deep font-bold">•</span>
-            <span>{t("consentItem3")}</span>
-          </li>
-        </ul>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setConsent(!consent)}
-        className={`w-full flex items-start gap-3 p-5 rounded-card text-left transition-all duration-200 ${
-          consent
-            ? "bg-sage/30 ring-2 ring-sage-deep"
-            : "bg-white border border-border hover:border-sage-deep"
-        }`}
-      >
-        <div
-          className={`mt-0.5 size-6 flex-shrink-0 rounded-md flex items-center justify-center transition ${
-            consent ? "bg-sage-deep text-white" : "bg-cream border border-border"
-          }`}
-        >
-          {consent && "✓"}
-        </div>
-        <span className="font-medium text-ink">{t("consentCheckbox")}</span>
-      </button>
+    <div className="max-w-md w-full">
+      <div className="text-7xl mb-6">{emoji}</div>
+      <h2 className="font-display font-bold text-3xl text-ink leading-tight">
+        {title}
+      </h2>
+      <p className="mt-4 text-ink-soft text-lg leading-relaxed">{body}</p>
+      {children}
     </div>
   );
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────
-
-function StepHeader({ title, sub }: { title: string; sub: string }) {
+function WelcomeSlide({ locale }: { locale: "en" | "zh-TW" }) {
   return (
-    <header>
-      <h1 className="font-display text-2xl md:text-3xl font-bold text-ink leading-tight">
-        {title}
-      </h1>
-      <p className="mt-2 text-base text-ink-soft leading-relaxed">{sub}</p>
-    </header>
+    <SlideShell
+      emoji="🍎"
+      title={locale === "en" ? "Welcome to Nibble" : "歡迎使用 Nibble"}
+      body={
+        locale === "en"
+          ? "Snap a photo of any meal — we'll tell you exactly what nutrients it covered for the day."
+          : "拍張任何一餐的照片，我們會告訴你今天的營養補了多少。"
+      }
+    />
   );
 }
 
-// ─── Step 0: profile kind picker ──────────────────────────────────────────
-// First step of the onboarding flow. Determines which RDA table, food-caution
-// rules, and subsequent steps the rest of the flow uses.
+function SnapSlide({ locale }: { locale: "en" | "zh-TW" }) {
+  return (
+    <SlideShell
+      emoji="📸"
+      title={locale === "en" ? "Snap any meal" : "拍下你的餐"}
+      body={
+        locale === "en"
+          ? "One photo. No weighing, no typing, no manual logging."
+          : "一張照片，免秤重、免輸入、免手動記錄。"
+      }
+    >
+      <div className="mt-8 mx-auto max-w-xs rounded-bubble bg-white card-pop p-4 flex items-center justify-center gap-3">
+        <span className="text-3xl">🥗</span>
+        <span className="text-3xl animate-pulse">→</span>
+        <span className="text-3xl">📊</span>
+      </div>
+    </SlideShell>
+  );
+}
 
-function Step0KindPicker({
+function AnalyzeSlide({ locale }: { locale: "en" | "zh-TW" }) {
+  return (
+    <SlideShell
+      emoji="✨"
+      title={locale === "en" ? "AI breaks it down" : "AI 秒懂營養"}
+      body={
+        locale === "en"
+          ? "Iron, calcium, DHA, folate — every nutrient that matters, in seconds."
+          : "鐵、鈣、DHA、葉酸——所有重要營養素，幾秒鐘搞定。"
+      }
+    >
+      <div className="mt-8 mx-auto max-w-xs grid grid-cols-3 gap-3 text-xs">
+        <NutrientChip emoji="⚙️" label={locale === "en" ? "Iron" : "鐵"} pct={72} color="#6fb38a" />
+        <NutrientChip emoji="🦴" label={locale === "en" ? "Calcium" : "鈣"} pct={91} color="#a8d5ba" />
+        <NutrientChip emoji="🐟" label="DHA" pct={48} color="#f5cf66" />
+      </div>
+    </SlideShell>
+  );
+}
+
+function TargetsSlide({ locale }: { locale: "en" | "zh-TW" }) {
+  return (
+    <SlideShell
+      emoji="🎯"
+      title={locale === "en" ? "Daily targets, made visible" : "每日目標，一目了然"}
+      body={
+        locale === "en"
+          ? "Each meal you scan adds to today's totals. See at a glance whether the day's covered."
+          : "每一餐都會累加到今天的進度，是否補夠了，一眼就懂。"
+      }
+    >
+      <div className="mt-8 inline-flex items-center gap-3 px-4 py-2 rounded-full bg-sage/30 border border-sage-deep/30">
+        <span className="text-lg">✅</span>
+        <span className="text-sm font-medium text-sage-deep">
+          {locale === "en" ? "Iron · 100% of today" : "鐵 · 今日 100%"}
+        </span>
+      </div>
+    </SlideShell>
+  );
+}
+
+function AskSlide({ locale }: { locale: "en" | "zh-TW" }) {
+  return (
+    <SlideShell
+      emoji="💬"
+      title={locale === "en" ? "Ask anything" : "什麼都能問"}
+      body={
+        locale === "en"
+          ? "Solids, allergens, picky eaters, daily nutrition — Nibble has answers."
+          : "副食品、過敏原、挑食、每日營養——Nibble 都知道。"
+      }
+    >
+      <div className="mt-8 mx-auto max-w-xs rounded-bubble bg-white card-pop p-4 text-left text-sm">
+        <p className="text-ink-faded text-xs mb-2">
+          {locale === "en" ? "You" : "你"}
+        </p>
+        <p className="text-ink mb-4">
+          {locale === "en"
+            ? "How much iron does my baby need?"
+            : "寶寶一天需要多少鐵？"}
+        </p>
+        <p className="text-peach-deep text-xs mb-2">Nibble 🍎</p>
+        <p className="text-ink leading-relaxed">
+          {locale === "en"
+            ? "About 11mg/day at 7-12mo — try egg yolk, beef purée, lentils."
+            : "7-12 個月約 11mg/天 — 蛋黃、紅肉泥、扁豆都是好選擇。"}
+        </p>
+      </div>
+    </SlideShell>
+  );
+}
+
+function SetupSlide({
   locale,
+  name,
+  setName,
   kind,
   setKind,
 }: {
-  locale: "zh-TW" | "en";
-  kind: ProfileKind;
-  setKind: (k: ProfileKind) => void;
+  locale: "en" | "zh-TW";
+  name: string;
+  setName: (v: string) => void;
+  kind: Exclude<ProfileKind, "newborn">;
+  setKind: (k: Exclude<ProfileKind, "newborn">) => void;
 }) {
-  const L = (en: string, zh: string) => (locale === "en" ? en : zh);
-  const choices: Array<{
-    key: ProfileKind;
+  const KIND_OPTIONS: Array<{
+    key: Exclude<ProfileKind, "newborn">;
     emoji: string;
-    titleEn: string;
-    titleZh: string;
-    subEn: string;
-    subZh: string;
+    en: string;
+    zh: string;
   }> = [
-    {
-      key: "newborn",
-      emoji: "🍼",
-      titleEn: "A newborn (0–5 months)",
-      titleZh: "新生兒（0–5 個月）",
-      subEn: "Still on milk only. Track breastfeeds, bottles & diapers.",
-      subZh: "還在喝奶階段，追蹤哺乳、奶瓶與尿布，不含副食品。",
-    },
-    {
-      key: "infant",
-      emoji: "👶",
-      titleEn: "A baby or child (6mo–13yr)",
-      titleZh: "寶寶或孩子（6 個月–13 歲）",
-      subEn:
-        "Eating solids. Nutrient targets shift as they grow — iron & DHA for babies, calcium & protein for pre-teens.",
-      subZh:
-        "已開始吃副食品。營養重點隨年齡變化：嬰兒重視鐵與 DHA，學齡前後強調鈣與蛋白質。",
-    },
-    {
-      key: "pregnant",
-      emoji: "🤰",
-      titleEn: "I'm pregnant",
-      titleZh: "我正在懷孕",
-      subEn:
-        "My own nutrition. Trimester-aware: folate (T1), iron & DHA (T2/T3), plus alcohol & caffeine alerts.",
-      subZh:
-        "媽媽自己的營養：各孕期重點不同（第一孕期葉酸、第二、三孕期鐵與 DHA），提醒避免酒精與過量咖啡因。",
-    },
-    {
-      key: "breastfeeding",
-      emoji: "🤱",
-      titleEn: "I'm breastfeeding",
-      titleZh: "我正在哺乳",
-      subEn:
-        "My own nutrition. Iodine is the peak lifetime target, plus DHA, calcium & caffeine alerts.",
-      subZh:
-        "媽媽自己的營養：碘需求達人生高峰，還有 DHA、鈣與咖啡因提醒。",
-    },
+    { key: "infant", emoji: "👶", en: "A baby / toddler", zh: "寶寶" },
+    { key: "pregnant", emoji: "🤰", en: "I'm pregnant", zh: "懷孕中" },
+    { key: "breastfeeding", emoji: "🤱", en: "I'm breastfeeding", zh: "哺乳中" },
   ];
-  return (
-    <div className="space-y-6">
-      <StepHeader
-        title={L("Who are we tracking?", "要追蹤誰的營養？")}
-        sub={L(
-          "Nibble tailors nutrient targets and food cautions to who you're tracking.",
-          "Nibble 會依照對象調整每日營養目標與食物注意事項。",
-        )}
-      />
-      <div className="space-y-3">
-        {choices.map((c) => {
-          const selected = kind === c.key;
-          return (
-            <button
-              key={c.key}
-              type="button"
-              onClick={() => setKind(c.key)}
-              className={`w-full text-left flex items-start gap-4 p-5 rounded-card transition-all duration-200 ${
-                selected
-                  ? "bg-peach/30 ring-2 ring-peach-deep"
-                  : "bg-white border border-border hover:border-peach-deep"
-              }`}
-            >
-              <div className="text-3xl flex-shrink-0">{c.emoji}</div>
-              <div className="flex-1">
-                <p className="font-display font-semibold text-ink">
-                  {locale === "en" ? c.titleEn : c.titleZh}
-                </p>
-                <p className="mt-1 text-sm text-ink-soft leading-relaxed">
-                  {locale === "en" ? c.subEn : c.subZh}
-                </p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
-// ─── Step 2 variant: pregnancy due date ───────────────────────────────────
-
-function Step2PregnancyDueDate({
-  locale,
-  dueDate,
-  setDueDate,
-  preview,
-}: {
-  locale: "zh-TW" | "en";
-  dueDate: string;
-  setDueDate: (s: string) => void;
-  preview: { weeks: number; trimester: 1 | 2 | 3 } | null;
-}) {
-  const L = (en: string, zh: string) => (locale === "en" ? en : zh);
-  // Due date must be in the future but within ~10 months.
-  const todayDate = new Date();
-  const today = todayDate.toISOString().slice(0, 10);
-  const maxDate = new Date(todayDate);
-  maxDate.setMonth(maxDate.getMonth() + 10);
-  const max = maxDate.toISOString().slice(0, 10);
   return (
-    <div className="space-y-8">
-      <StepHeader
-        title={L("When's your due date?", "預產期是什麼時候？")}
-        sub={L(
-          "We use the standard 40-week convention to estimate your current trimester — not a medical prediction.",
-          "我們用標準的 40 週懷孕週期計算目前孕期，僅供參考，非醫療預測。",
-        )}
-      />
-      <div>
-        <label
-          htmlFor="pregnancy-due-date"
-          className="block text-sm font-medium text-ink mb-2"
-        >
-          {L("Estimated due date", "預產期")}
-        </label>
-        <input
-          id="pregnancy-due-date"
-          type="date"
-          value={dueDate}
-          min={today}
-          max={max}
-          onChange={(e) => setDueDate(e.target.value)}
-          className="w-full px-5 py-4 rounded-card bg-white border border-border text-lg focus:outline-none focus:ring-2 focus:ring-peach-deep/40 focus:border-peach-deep transition"
-        />
-      </div>
-      {preview && (
-        <>
-          <div className="rounded-card bg-sage/20 border border-sage/40 p-5">
-            <p className="text-sm font-medium text-sage-deep">
-              {L(
-                `You're about ${preview.weeks} weeks pregnant.`,
-                `您目前約懷孕 ${preview.weeks} 週。`,
-              )}
-            </p>
-            <p className="mt-1 text-lg font-display font-semibold text-ink">
-              {L(
-                `Trimester ${preview.trimester}`,
-                `第 ${preview.trimester === 1 ? "一" : preview.trimester === 2 ? "二" : "三"} 孕期`,
-              )}
-            </p>
-            <p className="mt-2 text-xs text-ink-faded">
-              {L(
-                "Targets shift each trimester — T1 highlights folate for neural tube development, T2/T3 focus on iron, DHA, and choline.",
-                "每個孕期重點不同：第一孕期強調葉酸（神經管發育），第二、三孕期則聚焦鐵、DHA 與膽鹼。",
-              )}
-            </p>
-          </div>
-          <NutrientPreviewCard
-            stageKey={
-              preview.trimester === 1
-                ? "pregnant-T1"
-                : preview.trimester === 2
-                  ? "pregnant-T2"
-                  : "pregnant-T3"
-            }
-            stageLabel={L(
-              `Pregnancy · Trimester ${preview.trimester}`,
-              `懷孕 · 第 ${preview.trimester === 1 ? "一" : preview.trimester === 2 ? "二" : "三"} 孕期`,
-            )}
-            locale={locale}
+    <div className="max-w-md w-full">
+      <div className="text-6xl mb-4">🚀</div>
+      <h2 className="font-display font-bold text-3xl text-ink leading-tight">
+        {locale === "en" ? "You're all set" : "準備好了！"}
+      </h2>
+      <p className="mt-3 text-ink-soft leading-relaxed">
+        {locale === "en"
+          ? "Two quick details so we can compute your daily nutrient targets."
+          : "最後兩個小問題，幫我們算出你的每日營養目標。"}
+      </p>
+
+      <div className="mt-8 space-y-6 text-left">
+        {/* Name */}
+        <div>
+          <label
+            htmlFor="setup-name"
+            className="block text-sm font-medium text-ink mb-2"
+          >
+            {locale === "en" ? "Your name (or baby's name)" : "你的名字（或寶寶的名字）"}
+          </label>
+          <input
+            id="setup-name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={locale === "en" ? "e.g. Coco, Mia, Me" : "例如：小豆、Coco、我"}
+            className="w-full px-4 py-3 rounded-card bg-white border border-border focus:border-peach-deep outline-none text-ink"
           />
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── Step 2 variant: breastfeeding start date ─────────────────────────────
-
-function Step2LactationStart({
-  locale,
-  startDate,
-  setStartDate,
-  preview,
-}: {
-  locale: "zh-TW" | "en";
-  startDate: string;
-  setStartDate: (s: string) => void;
-  preview: { weeks: number; months: number } | null;
-}) {
-  const L = (en: string, zh: string) => (locale === "en" ? en : zh);
-  // Start date must be in the past within the last ~2 years (cover extended BF).
-  const today = new Date().toISOString().slice(0, 10);
-  const minDate = new Date();
-  minDate.setFullYear(minDate.getFullYear() - 2);
-  const min = minDate.toISOString().slice(0, 10);
-  return (
-    <div className="space-y-8">
-      <StepHeader
-        title={L("When did you start breastfeeding?", "開始哺乳的日期？")}
-        sub={L(
-          "Usually your baby's birthday. We use this to calculate your nutrient needs — they're highest in the first 6 months.",
-          "通常是寶寶的出生日。我們用這個日期計算每日營養需求，前 6 個月需求最高。",
-        )}
-      />
-      <div>
-        <label
-          htmlFor="lactation-start"
-          className="block text-sm font-medium text-ink mb-2"
-        >
-          {L("Breastfeeding start date", "哺乳開始日期")}
-        </label>
-        <input
-          id="lactation-start"
-          type="date"
-          value={startDate}
-          min={min}
-          max={today}
-          onChange={(e) => setStartDate(e.target.value)}
-          className="w-full px-5 py-4 rounded-card bg-white border border-border text-lg focus:outline-none focus:ring-2 focus:ring-peach-deep/40 focus:border-peach-deep transition"
-        />
-      </div>
-      {preview && (
-        <>
-          <div className="rounded-card bg-sage/20 border border-sage/40 p-5">
-            <p className="text-sm font-medium text-sage-deep">
-              {L(
-                `${preview.months} months postpartum (${preview.weeks} weeks).`,
-                `產後 ${preview.months} 個月（${preview.weeks} 週）。`,
-              )}
-            </p>
-            <p className="mt-1 text-lg font-display font-semibold text-ink">
-              {preview.months < 7
-                ? L("0–6 month phase", "產後 0–6 個月階段")
-                : L("7+ month phase", "產後 7 個月以上")}
-            </p>
-            <p className="mt-2 text-xs text-ink-faded">
-              {L(
-                "Lactation priorities differ from pregnancy — iodine becomes the top target (transfers to milk), while iron drops back to non-pregnant levels.",
-                "哺乳期重點與懷孕期不同：碘成為首要（會進入母乳），鐵則回到非孕期水準。",
-              )}
-            </p>
-          </div>
-          <NutrientPreviewCard
-            stageKey={
-              preview.months < 7 ? "lactation-0-6mo" : "lactation-7+mo"
-            }
-            stageLabel={
-              preview.months < 7
-                ? L(
-                    "Breastfeeding · 0–6 months",
-                    "哺乳 · 產後 0–6 個月",
-                  )
-                : L(
-                    "Breastfeeding · 7+ months",
-                    "哺乳 · 產後 7 個月以上",
-                  )
-            }
-            locale={locale}
-          />
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── Step 2 variant: newborn baby DOB (0-5 months) ────────────────────────
-// Tight date range so the user can't accidentally pick a DOB that makes
-// this a 2-year-old — that should be the "infant" profile kind. Live
-// days/weeks/months preview mirrors the breastfeeding-start picker.
-
-function Step2NewbornDob({
-  locale,
-  dob,
-  setDob,
-}: {
-  locale: "zh-TW" | "en";
-  dob: string;
-  setDob: (s: string) => void;
-}) {
-  const L = (en: string, zh: string) => (locale === "en" ? en : zh);
-  // Range: up to ~6 months ago; can't be in the future.
-  const today = new Date().toISOString().slice(0, 10);
-  const minDate = new Date();
-  minDate.setMonth(minDate.getMonth() - 6);
-  const min = minDate.toISOString().slice(0, 10);
-
-  // useMemo keeps Date.now() out of render body (React 19 flags it as
-  // impure). Recomputed only when the DOB string actually changes.
-  const preview = useMemo(() => {
-    if (!dob) return null;
-    const d = new Date(dob);
-    if (Number.isNaN(d.getTime())) return null;
-    const msPerDay = 24 * 60 * 60 * 1000;
-    // Date.now() inside useMemo is deliberate — we want the current time at
-    // first render after DOB changes. No re-render-on-tick is needed here.
-    const days = Math.max(
-      0,
-      // eslint-disable-next-line react-hooks/purity
-      Math.floor((Date.now() - d.getTime()) / msPerDay),
-    );
-    const weeks = Math.floor(days / 7);
-    const months = Math.floor(days / 30.44);
-    return { days, weeks, months };
-  }, [dob]);
-
-  return (
-    <div className="space-y-8">
-      <StepHeader
-        title={L("When was baby born?", "寶寶什麼時候出生的？")}
-        sub={L(
-          "We'll tailor feed and diaper benchmarks to your baby's exact weeks of life — they change fast in the first few months.",
-          "我們會依照寶寶出生週數調整哺乳與尿布的建議範圍。頭幾個月變化很快，精確一點會更有用。",
-        )}
-      />
-      <div>
-        <label
-          htmlFor="newborn-dob"
-          className="block text-sm font-medium text-ink mb-2"
-        >
-          {L("Baby's date of birth", "寶寶生日")}
-        </label>
-        <input
-          id="newborn-dob"
-          type="date"
-          value={dob}
-          min={min}
-          max={today}
-          onChange={(e) => setDob(e.target.value)}
-          className="w-full px-5 py-4 rounded-card bg-white border border-border text-lg focus:outline-none focus:ring-2 focus:ring-peach-deep/40 focus:border-peach-deep transition"
-        />
-        <p className="mt-2 text-xs text-ink-faded">
-          {L(
-            "Accepts babies 0–5 months old. For 6+ months, use the 'baby or child' option instead so the plate-scan features are available.",
-            "僅接受 0–5 個月大的寶寶。6 個月以上請改選「寶寶或孩子」，才有餐盤掃描功能。",
-          )}
-        </p>
-      </div>
-      {preview && (
-        <div className="rounded-card bg-sage/20 border border-sage/40 p-5">
-          <p className="text-sm font-medium text-sage-deep">
-            {preview.weeks < 2
-              ? L(`${preview.days} days old`, `出生 ${preview.days} 天`)
-              : preview.weeks < 14
-                ? L(`${preview.weeks} weeks old`, `出生 ${preview.weeks} 週`)
-                : L(`${preview.months} months old`, `${preview.months} 個月大`)}
-          </p>
-          <p className="mt-1 text-base text-ink leading-snug">
-            {L(
-              "Baby's feed card will show AAP/LLL expected ranges for this age.",
-              "寶寶的餵食卡會顯示這個週數的 AAP/LLL 建議範圍。",
-            )}
-          </p>
         </div>
-      )}
+
+        {/* Kind picker */}
+        <div>
+          <p className="text-sm font-medium text-ink mb-2">
+            {locale === "en" ? "What are we tracking?" : "要追蹤誰？"}
+          </p>
+          <div className="grid grid-cols-1 gap-2">
+            {KIND_OPTIONS.map((opt) => {
+              const active = kind === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setKind(opt.key)}
+                  className={`flex items-center gap-3 p-4 rounded-card border transition text-left ${
+                    active
+                      ? "bg-peach/10 border-peach-deep"
+                      : "bg-white border-border hover:border-peach/40"
+                  }`}
+                >
+                  <span className="text-2xl">{opt.emoji}</span>
+                  <span className="font-medium text-ink flex-1">
+                    {locale === "en" ? opt.en : opt.zh}
+                  </span>
+                  {active && <span className="text-peach-deep text-xl">✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Tiny helpers ───────────────────────────────────────────────────────── */
+
+function NutrientChip({
+  emoji,
+  label,
+  pct,
+  color,
+}: {
+  emoji: string;
+  label: string;
+  pct: number;
+  color: string;
+}) {
+  return (
+    <div className="rounded-card bg-white card-pop p-3 flex flex-col items-center">
+      <div className="text-xl">{emoji}</div>
+      <div className="font-display font-bold text-ink mt-1" style={{ color }}>
+        {pct}%
+      </div>
+      <div className="text-ink-faded text-[11px] mt-0.5">{label}</div>
     </div>
   );
 }
