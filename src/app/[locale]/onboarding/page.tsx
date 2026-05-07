@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocale } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import {
   useChildProfileStore,
   type ProfileKind,
 } from "@/stores/childProfileStore";
+import {
+  AGE_BUCKET_LABELS,
+  ageInfoFromDob,
+  trimesterFromWeeks,
+  weeksPostpartumFromStart,
+  weeksPregnantFromDueDate,
+} from "@/lib/pediatric/ageBucket";
 
 /**
  * Onboarding — a 6-slide tutorial that ends with a one-line setup.
@@ -50,27 +57,11 @@ const KIND_AVATARS: Record<Exclude<ProfileKind, "newborn">, string> = {
   breastfeeding: "🤱",
 };
 
-// Today minus N days, formatted as YYYY-MM-DD.
-function isoDateOffset(daysFromToday: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + daysFromToday);
-  return d.toISOString().slice(0, 10);
-}
-
-// Sensible profile defaults so the user doesn't have to fill in dates.
-// They can edit these later if they're tracking precisely.
-function defaultDates(kind: Exclude<ProfileKind, "newborn">) {
-  if (kind === "infant") {
-    // 12 months old — lands in the 12-23mo bucket which has the broadest
-    // RDA targets. Caregivers with younger / older babies will edit.
-    return { dob: isoDateOffset(-365), pregnancyDueDate: undefined, breastfeedingStartDate: undefined };
-  }
-  if (kind === "pregnant") {
-    // Due date 20 weeks out → currently second trimester.
-    return { dob: isoDateOffset(0), pregnancyDueDate: isoDateOffset(140), breastfeedingStartDate: undefined };
-  }
-  // breastfeeding — 8 weeks postpartum → currently in the 0-6mo lactation bucket.
-  return { dob: isoDateOffset(0), pregnancyDueDate: undefined, breastfeedingStartDate: isoDateOffset(-56) };
+// YYYY-MM-DD for today (used as min/max bounds and as a fallback so the
+// shape stays consistent for non-infant profiles whose bucket comes from
+// pregnancyDueDate / breastfeedingStartDate instead).
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function OnboardingPage() {
@@ -88,7 +79,21 @@ export default function OnboardingPage() {
   const [slideIdx, setSlideIdx] = useState(0);
   const [name, setName] = useState("");
   const [kind, setKind] = useState<Exclude<ProfileKind, "newborn">>("infant");
+  // Date fields are kind-specific. We keep all three pieces of state so
+  // toggling between kinds doesn't lose what the user already entered.
+  const [dob, setDob] = useState<string>("");
+  const [dueDate, setDueDate] = useState<string>("");
+  const [bfStart, setBfStart] = useState<string>("");
   const [saving, setSaving] = useState(false);
+
+  // Whether the date for the active kind has been filled in. The
+  // "Start tracking" button is disabled until it is — without a real
+  // date the RDA bucket is wrong, which defeats the point of the app.
+  const dateFilled = useMemo(() => {
+    if (kind === "infant") return dob !== "";
+    if (kind === "pregnant") return dueDate !== "";
+    return bfStart !== "";
+  }, [kind, dob, dueDate, bfStart]);
 
   const slide = SLIDES[slideIdx];
   const isLast = slide === "setup";
@@ -108,22 +113,28 @@ export default function OnboardingPage() {
 
   async function finish() {
     if (saving) return;
+    if (!dateFilled) return; // guard — the button is disabled but be safe
     setSaving(true);
     try {
       const trimmed = name.trim();
       const fallbackName = locale === "en" ? "Me" : "我";
-      const dates = defaultDates(kind);
+      // The Child schema always carries a `dob` field (even for non-infant
+      // kinds, where it's just a placeholder for the row shape). For infants
+      // it carries the real DOB the caregiver picked; for pregnant /
+      // breastfeeding profiles the bucket is computed off the kind-specific
+      // date and the dob is set to today as a meaningless filler.
+      const realDob = kind === "infant" ? dob : todayIso();
       const id = addChild({
         name: trimmed || fallbackName,
         avatar: KIND_AVATARS[kind],
         allergens: [],
         notes: "",
         kind,
-        dob: dates.dob,
+        dob: realDob,
         sex: "unspecified",
         feedingStyle: kind === "infant" ? "mixed" : undefined,
-        pregnancyDueDate: dates.pregnancyDueDate,
-        breastfeedingStartDate: dates.breastfeedingStartDate,
+        pregnancyDueDate: kind === "pregnant" ? dueDate : undefined,
+        breastfeedingStartDate: kind === "breastfeeding" ? bfStart : undefined,
       });
       setActiveChild(id);
       router.replace("/app");
@@ -164,6 +175,12 @@ export default function OnboardingPage() {
             setName={setName}
             kind={kind}
             setKind={setKind}
+            dob={dob}
+            setDob={setDob}
+            dueDate={dueDate}
+            setDueDate={setDueDate}
+            bfStart={bfStart}
+            setBfStart={setBfStart}
           />
         )}
       </div>
@@ -208,12 +225,14 @@ export default function OnboardingPage() {
             <button
               type="button"
               onClick={finish}
-              disabled={saving}
-              className="flex-[2] py-3 rounded-full bg-peach-deep text-white font-semibold bubble-shadow hover:bg-peach-deep/90 transition disabled:opacity-60"
+              disabled={saving || !dateFilled}
+              className="flex-[2] py-3 rounded-full bg-peach-deep text-white font-semibold bubble-shadow hover:bg-peach-deep/90 transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {saving
                 ? locale === "en" ? "Setting up…" : "建立中⋯⋯"
-                : locale === "en" ? "Start tracking" : "開始追蹤"}
+                : !dateFilled
+                  ? locale === "en" ? "Pick a date to continue" : "請先選擇日期"
+                  : locale === "en" ? "Start tracking" : "開始追蹤"}
             </button>
           )}
         </div>
@@ -451,12 +470,24 @@ function SetupSlide({
   setName,
   kind,
   setKind,
+  dob,
+  setDob,
+  dueDate,
+  setDueDate,
+  bfStart,
+  setBfStart,
 }: {
   locale: "en" | "zh-TW";
   name: string;
   setName: (v: string) => void;
   kind: Exclude<ProfileKind, "newborn">;
   setKind: (k: Exclude<ProfileKind, "newborn">) => void;
+  dob: string;
+  setDob: (v: string) => void;
+  dueDate: string;
+  setDueDate: (v: string) => void;
+  bfStart: string;
+  setBfStart: (v: string) => void;
 }) {
   const KIND_OPTIONS: Array<{
     key: Exclude<ProfileKind, "newborn">;
@@ -469,16 +500,31 @@ function SetupSlide({
     { key: "breastfeeding", emoji: "🤱", en: "I'm breastfeeding", zh: "哺乳中" },
   ];
 
+  const today = todayIso();
+  // For an infant DOB picker, allow up to 14 years back. The RDA tables
+  // cap at 13y; anything older falls into the 48mo+ bucket which is fine.
+  const fourteenYrsAgo = (() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 14);
+    return d.toISOString().slice(0, 10);
+  })();
+  // Pregnancy lasts ~40 weeks → due date can be up to ~280 days out.
+  const ninetyMonthsOut = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 280);
+    return d.toISOString().slice(0, 10);
+  })();
+
   return (
     <div className="max-w-md w-full">
       <div className="text-6xl mb-4">🚀</div>
       <h2 className="font-display font-bold text-3xl text-ink leading-tight">
-        {locale === "en" ? "You're all set" : "準備好了！"}
+        {locale === "en" ? "You're almost set" : "差一點點就好！"}
       </h2>
       <p className="mt-3 text-ink-soft leading-relaxed">
         {locale === "en"
-          ? "Two quick details so we can compute your daily nutrient targets."
-          : "最後兩個小問題，幫我們算出你的每日營養目標。"}
+          ? "A few quick details so we can compute the right daily nutrient targets — these depend on age and life stage."
+          : "幾個小問題，幫我們算出對應你的每日營養目標——這些會依年齡與生命階段而不同。"}
       </p>
 
       <div className="mt-8 space-y-6 text-left">
@@ -529,9 +575,155 @@ function SetupSlide({
             })}
           </div>
         </div>
+
+        {/* Date — kind-specific. The RDA bucket is computed from this, so
+            without a real value the daily targets default to a meaningless
+            placeholder. Required to continue. */}
+        {kind === "infant" && (
+          <DateField
+            id="setup-dob"
+            label={locale === "en" ? "Baby's date of birth" : "寶貝的出生日期"}
+            hint={locale === "en"
+              ? "Used to pick the right age-bucket targets (6-8mo, 9-11mo, 12-23mo, …)."
+              : "用來推算月齡分組目標（6-8、9-11、12-23 個月⋯）。"}
+            value={dob}
+            onChange={setDob}
+            min={fourteenYrsAgo}
+            max={today}
+            preview={dob ? dobPreview(dob, locale) : null}
+          />
+        )}
+        {kind === "pregnant" && (
+          <DateField
+            id="setup-due"
+            label={locale === "en" ? "Estimated due date" : "預產期"}
+            hint={locale === "en"
+              ? "Used to pick trimester-specific targets — folate, iron, choline shift across T1/T2/T3."
+              : "用來推算所在孕期——不同三個月對葉酸、鐵、膽鹼的需求不同。"}
+            value={dueDate}
+            onChange={setDueDate}
+            min={today}
+            max={ninetyMonthsOut}
+            preview={dueDate ? duePreview(dueDate, locale) : null}
+          />
+        )}
+        {kind === "breastfeeding" && (
+          <DateField
+            id="setup-bf"
+            label={locale === "en"
+              ? "When did breastfeeding start?"
+              : "哺乳從什麼時候開始？"}
+            hint={locale === "en"
+              ? "Usually baby's birth date. Targets shift slightly between 0–6mo and 7+mo postpartum."
+              : "通常是寶寶的出生日。0-6 個月與 7 個月以後的目標略有不同。"}
+            value={bfStart}
+            onChange={setBfStart}
+            min={fourteenYrsAgo}
+            max={today}
+            preview={bfStart ? bfPreview(bfStart, locale) : null}
+          />
+        )}
       </div>
     </div>
   );
+}
+
+function DateField({
+  id,
+  label,
+  hint,
+  value,
+  onChange,
+  min,
+  max,
+  preview,
+}: {
+  id: string;
+  label: string;
+  hint: string;
+  value: string;
+  onChange: (v: string) => void;
+  min: string;
+  max: string;
+  preview: string | null;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-ink mb-2">
+        {label}
+      </label>
+      <input
+        id={id}
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        min={min}
+        max={max}
+        className="w-full px-4 py-3 rounded-card bg-white border border-border focus:border-peach-deep outline-none text-ink tabular-nums"
+      />
+      <p className="mt-1.5 text-xs text-ink-faded leading-snug">{hint}</p>
+      {preview && (
+        <p className="mt-2 text-sm text-sage-deep font-medium">{preview}</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Date previews — give the caregiver immediate feedback that the
+//     date they picked maps to the right life-stage bucket. ──────────
+
+function dobPreview(dob: string, locale: "en" | "zh-TW"): string {
+  try {
+    const info = ageInfoFromDob(dob);
+    const bucketLabel = AGE_BUCKET_LABELS[info.bucket]?.[locale] ?? info.bucket;
+    if (locale === "en") {
+      return info.months < 24
+        ? `~${info.months} months old · ${bucketLabel}`
+        : `~${info.years}y ${info.months % 12}m · ${bucketLabel}`;
+    }
+    return info.months < 24
+      ? `約 ${info.months} 個月 · ${bucketLabel}`
+      : `約 ${info.years} 歲 ${info.months % 12} 個月 · ${bucketLabel}`;
+  } catch {
+    return "";
+  }
+}
+
+function duePreview(due: string, locale: "en" | "zh-TW"): string {
+  try {
+    const weeks = weeksPregnantFromDueDate(due);
+    if (weeks <= 0) {
+      return locale === "en"
+        ? "Due date is in the future — that doesn't look like a current pregnancy."
+        : "預產期看起來還沒進入孕期。";
+    }
+    const tri = trimesterFromWeeks(weeks);
+    const labels = {
+      en: { 1: "1st trimester", 2: "2nd trimester", 3: "3rd trimester" },
+      "zh-TW": { 1: "第一孕期", 2: "第二孕期", 3: "第三孕期" },
+    } as const;
+    return locale === "en"
+      ? `~${weeks} weeks pregnant · ${labels.en[tri]}`
+      : `懷孕約 ${weeks} 週 · ${labels["zh-TW"][tri]}`;
+  } catch {
+    return "";
+  }
+}
+
+function bfPreview(start: string, locale: "en" | "zh-TW"): string {
+  try {
+    const weeks = weeksPostpartumFromStart(start);
+    const months = Math.floor(weeks / 4.345);
+    const phase =
+      months < 7
+        ? locale === "en" ? "0-6 month phase" : "0-6 個月哺乳期"
+        : locale === "en" ? "7+ month phase" : "7 個月以上哺乳期";
+    return locale === "en"
+      ? `~${weeks} weeks postpartum · ${phase}`
+      : `產後約 ${weeks} 週 · ${phase}`;
+  } catch {
+    return "";
+  }
 }
 
 /* ─── Tiny helpers ───────────────────────────────────────────────────────── */
