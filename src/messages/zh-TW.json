@@ -12,8 +12,10 @@
     "signup": "免費試用",
     "dashboard": "我的寶貝",
     "scan": "掃描",
-    "history": "紀錄",
-    "more": "更多"
+    "history": "記錄",
+    "more": "更多",
+    "ai": "AI",
+    "account": "帳戶"
   },
   "Landing": {
     "heroTitle": "寶寶吃完了，但今天真的吃夠了嗎？",

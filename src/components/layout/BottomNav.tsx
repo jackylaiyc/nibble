@@ -6,17 +6,24 @@ import { Link } from "@/i18n/navigation";
 import { usePathname } from "next/navigation";
 import { ScanSourceSheet } from "@/components/scan/ScanSourceSheet";
 
+// Bottom nav order (left → right): AI · Scan · History · Account.
+// The "scan" slot is rendered separately (it's a button that opens a
+// bottom sheet, not a Link), so this list only carries the three Link
+// tabs that bookend it.
 const NAV_TABS = [
-  { key: "home" as const, href: "/app" as const, exact: true },
+  { key: "ai" as const, href: "/app/chat" as const, exact: false },
   { key: "history" as const, href: "/app/scan/history" as const, exact: false },
-  { key: "more" as const, href: "/app/more" as const, exact: false },
+  { key: "account" as const, href: "/app/more" as const, exact: false },
 ] as const;
 
-function HomeIcon() {
+function ChatIcon() {
+  // Speech bubble with three dots — universal "AI / chat" affordance.
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <circle cx="8" cy="10" r="0.6" fill="currentColor" />
+      <circle cx="12" cy="10" r="0.6" fill="currentColor" />
+      <circle cx="16" cy="10" r="0.6" fill="currentColor" />
     </svg>
   );
 }
@@ -39,21 +46,19 @@ function ClockIcon() {
   );
 }
 
-function GridIcon() {
+function PersonIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="7" rx="1" />
-      <rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="14" y="14" width="7" height="7" rx="1" />
-      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
     </svg>
   );
 }
 
 const TAB_ICONS = {
-  home: HomeIcon,
+  ai: ChatIcon,
   history: ClockIcon,
-  more: GridIcon,
+  account: PersonIcon,
 } as const;
 
 export function BottomNav() {
@@ -66,7 +71,8 @@ export function BottomNav() {
 
   function isActive(tab: (typeof NAV_TABS)[number]): boolean {
     if (tab.exact) return cleanPath === tab.href;
-    if (tab.key === "history") return cleanPath.startsWith("/app/scan/history");
+    // Each non-exact tab activates anywhere within its destination
+    // tree — chat sub-pages, history, account/more sub-pages.
     return cleanPath.startsWith(tab.href);
   }
 
@@ -101,9 +107,10 @@ export function BottomNav() {
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <div className="max-w-xl mx-auto flex items-center justify-around px-2 py-2">
+          {/* Order left → right: AI · Scan · History · Account */}
           {renderLinkTab(NAV_TABS[0])}
 
-          {/* Scan tab — opens the ScanSourceSheet to pick photo / barcode / search */}
+          {/* Scan slot — opens the ScanSourceSheet to pick photo / barcode / search */}
           <button
             type="button"
             onClick={() => setScanSheetOpen(true)}

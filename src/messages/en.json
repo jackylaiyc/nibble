@@ -13,7 +13,9 @@
     "dashboard": "My baby",
     "scan": "Scan",
     "history": "History",
-    "more": "More"
+    "more": "More",
+    "ai": "AI",
+    "account": "Account"
   },
   "Landing": {
     "heroTitle": "Your baby ate. But did they eat enough?",

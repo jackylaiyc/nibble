@@ -38,7 +38,7 @@ export default function MorePage() {
     <main className="min-h-screen bg-cream pb-28">
       <div className="max-w-xl mx-auto px-5 pt-6">
         <h1 className="font-display font-bold text-ink text-xl mb-6">
-          {locale === "en" ? "More" : "更多功能"}
+          {locale === "en" ? "Account" : "帳戶"}
         </h1>
 
         <ul className="space-y-2">
