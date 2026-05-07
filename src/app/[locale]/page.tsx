@@ -3,6 +3,7 @@ import { setRequestLocale } from "next-intl/server";
 import Link from "next/link";
 import { use } from "react";
 import { NewsletterForm } from "@/components/marketing/NewsletterForm";
+import { LandingDemoAnimation } from "@/components/marketing/LandingDemoAnimation";
 
 /**
  * Landing page — marketing, not app-shell.
@@ -146,10 +147,11 @@ export default function LandingPage({
         </div>
       </section>
 
-      {/* Video section — drop your demo at /public/nibble-demo.mp4 (and
-          optional poster at /public/nibble-demo-poster.jpg). The <video>
-          element will automatically pick it up. While the file isn't there,
-          the player surface still renders with the poster fallback. */}
+      {/* Video section — currently a CSS-animated phone mockup that loops
+          through Nibble's flow (snap → analyze → results → targets badge).
+          Once a real screen-recorded walkthrough lives at
+          /public/nibble-demo.mp4 we can swap LandingDemoAnimation for a
+          <video> element pointing at it (see public/README.md for specs). */}
       <section id="video" className="px-6 py-20 bg-cream">
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="font-display text-3xl md:text-4xl font-bold text-ink leading-tight">
@@ -158,18 +160,8 @@ export default function LandingPage({
           <p className="mt-3 text-ink-soft leading-relaxed">
             {t("videoSub")}
           </p>
-          <div className="mt-10 mx-auto rounded-bubble overflow-hidden card-pop bg-ink/5 aspect-video">
-            <video
-              className="w-full h-full"
-              controls
-              playsInline
-              preload="metadata"
-              poster="/nibble-demo-poster.jpg"
-            >
-              <source src="/nibble-demo.mp4" type="video/mp4" />
-              <source src="/nibble-demo.webm" type="video/webm" />
-              <p className="p-6 text-ink-soft text-sm">{t("videoFallback")}</p>
-            </video>
+          <div className="mt-12 mb-2 flex justify-center">
+            <LandingDemoAnimation locale={locale as "en" | "zh-TW"} />
           </div>
         </div>
       </section>

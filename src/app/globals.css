@@ -131,3 +131,85 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   opacity: 0.6;
   cursor: pointer;
 }
+
+/*
+ * Landing-page demo animation — used by <LandingDemoAnimation /> in the
+ * marketing site to show the Nibble flow without a real video file.
+ * The animation runs on a 14s loop with four stages overlapping inside
+ * a phone-frame container. Each `nibble-stage-N` keyframe controls the
+ * opacity window for stage N within the loop.
+ *
+ * Stage timeline (0% = loop start, 100% = loop end):
+ *   Stage 1 (viewfinder)   →   3% –  21%   (≈ 0.4s – 2.9s)
+ *   Stage 2 (photo taken)  →  23% –  32%   (≈ 3.2s – 4.5s)
+ *   Stage 3 (analyzing)    →  34% –  43%   (≈ 4.8s – 6.0s)
+ *   Stage 4 (results)      →  45% –  90%   (≈ 6.3s – 12.6s)
+ *   gap + reset            →  91% – 100%
+ */
+@keyframes nibble-stage-1 {
+  0%, 3%   { opacity: 0; transform: scale(0.96); }
+  4%, 19%  { opacity: 1; transform: scale(1); }
+  21%, 100%{ opacity: 0; transform: scale(1); }
+}
+@keyframes nibble-stage-2 {
+  0%, 21%   { opacity: 0; transform: scale(0.96); }
+  23%, 30%  { opacity: 1; transform: scale(1); }
+  32%, 100% { opacity: 0; transform: scale(1); }
+}
+@keyframes nibble-stage-3 {
+  0%, 32%   { opacity: 0; transform: scale(0.96); }
+  34%, 41%  { opacity: 1; transform: scale(1); }
+  43%, 100% { opacity: 0; transform: scale(1); }
+}
+@keyframes nibble-stage-4 {
+  0%, 43%   { opacity: 0; transform: scale(0.96); }
+  45%, 90%  { opacity: 1; transform: scale(1); }
+  95%, 100% { opacity: 0; transform: scale(1); }
+}
+
+/* Ring fills — circumference of r=22 is ~138.23. We hold at full offset
+ * (0% filled) until just after stage 4 starts, then animate down to the
+ * target offset for each ring's percentage. Different keyframes per ring
+ * because CSS keyframes can't take parameters. */
+@keyframes nibble-ring-iron {     /* 72% filled → offset 138.23 × 0.28 ≈ 38.7 */
+  0%, 47%   { stroke-dashoffset: 138.23; }
+  62%, 100% { stroke-dashoffset: 38.7; }
+}
+@keyframes nibble-ring-calcium {  /* 91% filled → offset 138.23 × 0.09 ≈ 12.4 */
+  0%, 47%   { stroke-dashoffset: 138.23; }
+  62%, 100% { stroke-dashoffset: 12.4; }
+}
+@keyframes nibble-ring-dha {      /* 48% filled → offset 138.23 × 0.52 ≈ 71.9 */
+  0%, 47%   { stroke-dashoffset: 138.23; }
+  62%, 100% { stroke-dashoffset: 71.9; }
+}
+
+/* Camera-shutter flash between stage 1 → 2 */
+@keyframes nibble-flash {
+  0%, 21%   { opacity: 0; }
+  22%      { opacity: 0.85; }
+  24%      { opacity: 0; }
+  100%     { opacity: 0; }
+}
+
+/* Soft pulse for the "AI is analyzing…" dots */
+@keyframes nibble-dot-pulse {
+  0%, 40% { opacity: 0.25; transform: scale(0.85); }
+  50%     { opacity: 1;    transform: scale(1); }
+  60%, 100%{ opacity: 0.25; transform: scale(0.85); }
+}
+
+/* "Today's targets ✓" badge — bounces in late in stage 4 */
+@keyframes nibble-badge-pop {
+  0%, 65%  { opacity: 0; transform: scale(0.7) translateY(8px); }
+  72%      { opacity: 1; transform: scale(1.06) translateY(0); }
+  78%, 90% { opacity: 1; transform: scale(1) translateY(0); }
+  95%, 100%{ opacity: 0; transform: scale(1) translateY(0); }
+}
+
+/* Bottom progress strip — shows where we are in the 14s loop so the
+ * animation reads as a video rather than a stuck illustration. */
+@keyframes nibble-progress {
+  0%   { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
