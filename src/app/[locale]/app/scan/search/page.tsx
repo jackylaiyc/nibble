@@ -53,8 +53,10 @@ export default function SearchFoodPage() {
     return () => clearTimeout(h);
   }, [query]);
 
+  // Cap at 10 results — a longer list buries the right answer in
+  // similarly-named compounds and makes the page noisy.
   const results = useMemo(
-    () => searchAllFoods(debounced, 15),
+    () => searchAllFoods(debounced, 10),
     [debounced],
   );
 
@@ -236,7 +238,19 @@ export default function SearchFoodPage() {
               >
                 <span className="text-xl">🥣</span>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-ink truncate">{r.name}</p>
+                  {/* When the result rode in on a synonym-group match,
+                      surface its English label up front so the user
+                      doesn't have to read the Chinese to identify it.
+                      The DB name follows in muted text. */}
+                  {r.englishLabel ? (
+                    <p className="font-medium text-ink truncate">
+                      <span className="capitalize">{r.englishLabel}</span>
+                      <span className="text-ink-faded mx-1.5">·</span>
+                      <span className="text-ink-soft">{r.name}</span>
+                    </p>
+                  ) : (
+                    <p className="font-medium text-ink truncate">{r.name}</p>
+                  )}
                   <p className="text-xs text-ink-faded">
                     {r.source === "china" ? L("China DB", "中國食品成份") : L("Japan DB", "日本食品成份")}
                     {typeof r.per100g.calories === "number" && (

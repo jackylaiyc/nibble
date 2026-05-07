@@ -22,8 +22,13 @@ import type { FoodItem, PortionUnit } from "@/stores/mealStore";
 export interface FoodSearchResult {
   /** Stable-ish identifier for React keys: "cn-109001" / "jp-01010" */
   id: string;
-  /** Chinese display name (always present). */
+  /** Chinese / Japanese display name from the DB (always present). */
   name: string;
+  /** English label inferred from the synonym group whose CJK variant
+   *  produced the best score for this row. Optional — only populated
+   *  when the row participated in a known synonym group, so generic
+   *  rows fall back to the DB name only. */
+  englishLabel?: string;
   /** Score from the fuzzy matcher, exposed for debugging — not rendered. */
   score: number;
   source: "china" | "japan";
@@ -254,15 +259,35 @@ const FOOD_SYNONYMS: ReadonlyArray<readonly string[]> = [
   ["hamburger", "漢堡", "汉堡", "ハンバーガー"],
 ];
 
+/** A query variant carries the token to score AND the English label
+ *  of the synonym group it came from (if any). When this variant
+ *  produces the best score for a DB row, we attach its English label
+ *  to the result so the UI can show "Banana · 香蕉" instead of just
+ *  "香蕉". The raw user query has no English label. */
+interface Variant {
+  token: string;
+  englishLabel?: string;
+}
+
+/** First Latin (a-z + space + hyphen) member of a group is treated as
+ *  the canonical English label. Returns undefined if the group has no
+ *  Latin member (rare, but defensive). */
+function pickEnglish(group: readonly string[]): string | undefined {
+  return group.find((m) => /^[a-z][a-z\s-]*$/i.test(m));
+}
+
 /**
  * Expand a raw query into every plausible script + synonym variant
- * the local DBs might carry. Always includes the original query so
- * exact matches still win.
+ * the local DBs might carry. Each variant is tagged with the English
+ * label of its synonym group so we can surface it in results.
  */
-function expandQuery(raw: string): string[] {
+function expandQuery(raw: string): Variant[] {
   const trimmed = raw.trim();
   if (!trimmed) return [];
-  const variants = new Set<string>([trimmed]);
+  // Map keeps insertion order AND lets us de-dup by token while
+  // preserving the English label for each.
+  const map = new Map<string, Variant>();
+  map.set(trimmed, { token: trimmed });
   const lower = trimmed.toLowerCase();
 
   // Synonym groups — if any member matches the query (substring either
@@ -273,20 +298,26 @@ function expandQuery(raw: string): string[] {
       return lower === m || lower.includes(m) || trimmed.includes(member);
     });
     if (matched) {
-      for (const v of group) variants.add(v);
+      const englishLabel = pickEnglish(group);
+      for (const v of group) {
+        if (!map.has(v)) map.set(v, { token: v, englishLabel });
+      }
     }
   }
 
-  // Run script conversion on EVERY variant currently in the set, not
+  // Run script conversion on EVERY variant currently in the map, not
   // just the raw query. This way synonym-table entries get expanded
   // across both scripts too — e.g. the table contains 鳳梨 (Traditional)
   // and OpenCC fans it out to 凤梨 (Simplified, which is what the
-  // China DB actually stores).
-  for (const v of Array.from(variants)) {
-    if (/[一-鿿]/.test(v)) {
+  // China DB actually stores). The English label rides along on each
+  // converted variant.
+  for (const [token, variant] of Array.from(map)) {
+    if (/[一-鿿]/.test(token)) {
       try {
-        variants.add(t2s(v));
-        variants.add(s2t(v));
+        const sim = t2s(token);
+        const trad = s2t(token);
+        if (!map.has(sim)) map.set(sim, { token: sim, englishLabel: variant.englishLabel });
+        if (!map.has(trad)) map.set(trad, { token: trad, englishLabel: variant.englishLabel });
       } catch {
         // OpenCC throws on extremely long input — ignore, fall back to
         // the variants we already have.
@@ -294,7 +325,7 @@ function expandQuery(raw: string): string[] {
     }
   }
 
-  return Array.from(variants);
+  return Array.from(map.values());
 }
 
 // ─── number parsing + fuzzy match (same as localFoodDb.ts) ──────────────────
@@ -307,19 +338,71 @@ function parseNum(val: unknown): number | null {
   return isNaN(n) ? null : n;
 }
 
+/** Strip parenthetical / bracketed annotations from a DB row name so
+ *  metadata (e.g. "(代表值)" = representative value, "[别名]" = alias)
+ *  doesn't drag the canonical row down the rankings. The China DB
+ *  uses both half-width and full-width brackets; the Japan DB also
+ *  uses Latin parens and `<...>` group tags occasionally. */
+function stripBrackets(s: string): string {
+  return s
+    .replace(/[（(\[<].*?[）)\]>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Score how well a query token matches a target food name.
+ *
+ * Matches against the BRACKET-STRIPPED form of the target so a row
+ * like "苹果（代表值）" scores like "苹果" — the canonical entry
+ * shouldn't be hidden behind metadata. We still distinguish exact
+ * matches from "exact except for brackets" by giving the latter 0.97.
+ *
+ * Base score reflects WHERE/HOW the match happens:
+ *   1.00 — exact match (target == query, no brackets)
+ *   0.97 — exact after stripping brackets ("苹果（代表值）" ↔ q "苹果")
+ *   0.95 — target starts with query
+ *   0.85 — query appears inside target
+ *   0.80 — query starts with target
+ *   0.75 — query contains target
+ *   else — character-overlap fallback
+ *
+ * Then we apply a LENGTH-RATIO penalty so a 2-char query doesn't
+ * tie with a 5-char compound (e.g. 红香蕉苹果 is "red banana-flavoured
+ * apple", not a banana). Length is computed on the STRIPPED target —
+ * brackets shouldn't pump the penalty either.
+ */
 function fuzzyScore(query: string, target: string): number {
   const q = query.toLowerCase().trim();
-  const t = target.toLowerCase().trim();
-  if (!q) return 0;
-  if (q === t) return 1.0;
-  if (t.includes(q)) return 0.9;
-  if (q.includes(t)) return 0.8;
-  const qChars = new Set(q);
-  const tChars = new Set(t);
-  let overlap = 0;
-  for (const c of qChars) if (tChars.has(c)) overlap++;
-  const ratio = overlap / Math.max(qChars.size, tChars.size);
-  return ratio > 0.5 ? ratio * 0.7 : 0;
+  const tFull = target.toLowerCase().trim();
+  if (!q || !tFull) return 0;
+  if (q === tFull) return 1.0;
+
+  const tCore = stripBrackets(tFull);
+  // Use stripped form for everything if it's non-empty — the brackets
+  // are usually descriptive metadata, not part of the food's name.
+  const t = tCore || tFull;
+  if (q === t) return 0.97;
+
+  let base: number;
+  if (t.startsWith(q)) base = 0.95;
+  else if (t.includes(q)) base = 0.85;
+  else if (q.startsWith(t)) base = 0.8;
+  else if (q.includes(t)) base = 0.75;
+  else {
+    const qChars = new Set(q);
+    const tChars = new Set(t);
+    let overlap = 0;
+    for (const c of qChars) if (tChars.has(c)) overlap++;
+    const charRatio = overlap / Math.max(qChars.size, tChars.size);
+    if (charRatio <= 0.5) return 0;
+    base = charRatio * 0.6;
+  }
+
+  const lenRatio = Math.min(1, q.length / t.length);
+  const lengthMult = 0.6 + 0.4 * lenRatio;
+
+  return base * lengthMult;
 }
 
 // ─── nutrient mapping ───────────────────────────────────────────────────────
@@ -368,27 +451,32 @@ export function searchAllFoods(query: string, limit = 10): FoodSearchResult[] {
   const variants = expandQuery(query);
   if (variants.length === 0) return [];
 
-  // For each row, take the MAX score across all query variants — that
-  // way "雞肉" (Traditional) finds "鸡肉" (Simplified) via the t→s
-  // variant, and "chicken" finds both via the English alias.
-  function bestScore(target: string): number {
-    let best = 0;
+  // Score `target` against every variant; return both the best score
+  // and the English label of whichever variant produced it. This lets
+  // the result carry "Banana" alongside the Chinese name when the
+  // banana-group's CJK variant won the scoring round.
+  function bestMatch(target: string): { score: number; englishLabel?: string } {
+    let bestScore = 0;
+    let bestLabel: string | undefined;
     for (const v of variants) {
-      const s = fuzzyScore(v, target);
-      if (s > best) best = s;
-      if (best >= 0.9) return best; // can't beat exact-substring match
+      const s = fuzzyScore(v.token, target);
+      if (s > bestScore) {
+        bestScore = s;
+        bestLabel = v.englishLabel;
+      }
     }
-    return best;
+    return { score: bestScore, englishLabel: bestLabel };
   }
 
   const results: FoodSearchResult[] = [];
 
   for (const row of chinaFoods) {
-    const score = bestScore(row.foodName);
+    const { score, englishLabel } = bestMatch(row.foodName);
     if (score >= 0.5) {
       results.push({
         id: `cn-${row.foodCode}`,
         name: row.foodName,
+        englishLabel,
         score,
         source: "china",
         per100g: mapChinaPer100g(row),
@@ -397,11 +485,12 @@ export function searchAllFoods(query: string, limit = 10): FoodSearchResult[] {
   }
 
   for (const row of japanFoods) {
-    const score = bestScore(row.foodName);
+    const { score, englishLabel } = bestMatch(row.foodName);
     if (score >= 0.5) {
       results.push({
         id: `jp-${(row as { foodCode?: string }).foodCode ?? row.foodName}`,
         name: row.foodName,
+        englishLabel,
         score,
         source: "japan",
         per100g: mapJapanPer100g(row),
@@ -410,7 +499,20 @@ export function searchAllFoods(query: string, limit = 10): FoodSearchResult[] {
   }
 
   results.sort((a, b) => b.score - a.score);
-  return results.slice(0, limit);
+
+  // Dedup by display name — the China DB sometimes carries multiple
+  // rows with identical foodNames (e.g. "香蕉（红皮）" appears twice
+  // with different USDA-style sub-codes). Showing them side by side
+  // looks like a UI bug. Keep the highest-scoring one per name.
+  const seen = new Set<string>();
+  const deduped: FoodSearchResult[] = [];
+  for (const r of results) {
+    if (seen.has(r.name)) continue;
+    seen.add(r.name);
+    deduped.push(r);
+    if (deduped.length >= limit) break;
+  }
+  return deduped;
 }
 
 // ─── portion scaling ────────────────────────────────────────────────────────
@@ -435,7 +537,12 @@ export function resultToFoodItem(
   }
   return {
     name: result.name,
-    nameEn: result.name, // local DBs don't have English names; use Chinese as fallback
+    // Prefer the synonym group's English label when we have one — that
+    // way the saved meal record reads "Banana" in en-locale views
+    // instead of falling back to the Chinese DB string.
+    nameEn: result.englishLabel
+      ? capitalizeFirst(result.englishLabel)
+      : result.name,
     portionAmount,
     portionUnit,
     gramsEstimate,
@@ -447,4 +554,8 @@ export function resultToFoodItem(
 
 function round(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function capitalizeFirst(s: string): string {
+  return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
 }
