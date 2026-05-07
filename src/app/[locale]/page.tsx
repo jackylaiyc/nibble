@@ -62,10 +62,10 @@ export default function LandingPage({
               {t("heroCta")} →
             </Link>
             <a
-              href="#how"
+              href="#video"
               className="inline-flex items-center justify-center gap-2 rounded-full bg-white/80 text-ink font-medium px-8 py-4 text-lg border border-border hover:bg-white transition"
             >
-              {t("heroSecondary")}
+              ▶ {t("heroSecondary")}
             </a>
           </div>
 
@@ -93,32 +93,84 @@ export default function LandingPage({
         </div>
       </section>
 
-      {/* Pain section */}
+      {/* Empathy section — validate the worry first, sell after. We list
+          5 of the worries every new mom has had at some point so the
+          reader feels seen the moment they scroll past the hero. */}
       <section className="px-6 py-20 bg-white">
+        <div className="mx-auto max-w-3xl text-center">
+          <h2 className="font-display text-3xl md:text-4xl font-bold text-ink leading-tight">
+            {t("empathyTitle")}
+          </h2>
+          <p className="mt-4 text-lg text-ink-soft leading-relaxed">
+            {t("empathySub")}
+          </p>
+          <ul className="mt-10 space-y-3 text-left max-w-xl mx-auto">
+            {(["empathy1", "empathy2", "empathy3", "empathy4", "empathy5"] as const).map((k) => (
+              <li
+                key={k}
+                className="rounded-bubble bg-cream border border-border p-4 md:p-5 font-display text-ink text-base md:text-lg leading-relaxed"
+              >
+                {t(k)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* Pain section — names the systemic causes behind the worries above */}
+      <section className="px-6 py-20 bg-cream">
         <div className="mx-auto max-w-5xl">
           <h2 className="text-center font-display text-3xl md:text-4xl font-bold text-ink mb-12">
             {t("painTitle")}
           </h2>
           <div className="grid sm:grid-cols-2 gap-5">
             <PainCard emoji="🤷🏻‍♀️" title={t("pain1Title")} desc={t("pain1Desc")} />
-            <PainCard emoji="⚙️" title={t("pain2Title")} desc={t("pain2Desc")} />
-            <PainCard emoji="💩" title={t("pain3Title")} desc={t("pain3Desc")} />
-            <PainCard emoji="🥜" title={t("pain4Title")} desc={t("pain4Desc")} />
+            <PainCard emoji="🔍" title={t("pain2Title")} desc={t("pain2Desc")} />
+            <PainCard emoji="🥜" title={t("pain3Title")} desc={t("pain3Desc")} />
+            <PainCard emoji="🌪️" title={t("pain4Title")} desc={t("pain4Desc")} />
           </div>
         </div>
       </section>
 
       {/* How it works */}
-      <section id="how" className="px-6 py-20 bg-cream">
+      <section id="how" className="px-6 py-20 bg-white">
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-center font-display text-3xl md:text-4xl font-bold text-ink mb-12">
+          <h2 className="text-center font-display text-3xl md:text-4xl font-bold text-ink mb-12 leading-tight">
             {t("howTitle")}
           </h2>
           <ol className="grid md:grid-cols-3 gap-6">
             <HowStep num="1" emoji="📸" title={t("how1Title")} desc={t("how1Desc")} />
             <HowStep num="2" emoji="✨" title={t("how2Title")} desc={t("how2Desc")} />
-            <HowStep num="3" emoji="💬" title={t("how3Title")} desc={t("how3Desc")} />
+            <HowStep num="3" emoji="🌙" title={t("how3Title")} desc={t("how3Desc")} />
           </ol>
+        </div>
+      </section>
+
+      {/* Video section — drop your demo at /public/nibble-demo.mp4 (and
+          optional poster at /public/nibble-demo-poster.jpg). The <video>
+          element will automatically pick it up. While the file isn't there,
+          the player surface still renders with the poster fallback. */}
+      <section id="video" className="px-6 py-20 bg-cream">
+        <div className="mx-auto max-w-3xl text-center">
+          <h2 className="font-display text-3xl md:text-4xl font-bold text-ink leading-tight">
+            {t("videoTitle")}
+          </h2>
+          <p className="mt-3 text-ink-soft leading-relaxed">
+            {t("videoSub")}
+          </p>
+          <div className="mt-10 mx-auto rounded-bubble overflow-hidden card-pop bg-ink/5 aspect-video">
+            <video
+              className="w-full h-full"
+              controls
+              playsInline
+              preload="metadata"
+              poster="/nibble-demo-poster.jpg"
+            >
+              <source src="/nibble-demo.mp4" type="video/mp4" />
+              <source src="/nibble-demo.webm" type="video/webm" />
+              <p className="p-6 text-ink-soft text-sm">{t("videoFallback")}</p>
+            </video>
+          </div>
         </div>
       </section>
 
