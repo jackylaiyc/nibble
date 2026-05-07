@@ -170,18 +170,22 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 /* Ring fills — circumference of r=22 is ~138.23. We hold at full offset
  * (0% filled) until just after stage 4 starts, then animate down to the
  * target offset for each ring's percentage. Different keyframes per ring
- * because CSS keyframes can't take parameters. */
-@keyframes nibble-ring-iron {     /* 72% filled → offset 138.23 × 0.28 ≈ 38.7 */
+ * because CSS keyframes can't take parameters.
+ *
+ * The three rings represent NUTRIENT CATEGORIES (not individual
+ * nutrients) so the marketing visual says "all 19 nutrients" rather
+ * than "we track three things called iron, calcium, DHA". */
+@keyframes nibble-ring-macros {    /* 88% filled → offset 138.23 × 0.12 ≈ 16.6 */
   0%, 47%   { stroke-dashoffset: 138.23; }
-  62%, 100% { stroke-dashoffset: 38.7; }
+  62%, 100% { stroke-dashoffset: 16.6; }
 }
-@keyframes nibble-ring-calcium {  /* 91% filled → offset 138.23 × 0.09 ≈ 12.4 */
+@keyframes nibble-ring-vitamins {  /* 76% filled → offset 138.23 × 0.24 ≈ 33.2 */
   0%, 47%   { stroke-dashoffset: 138.23; }
-  62%, 100% { stroke-dashoffset: 12.4; }
+  62%, 100% { stroke-dashoffset: 33.2; }
 }
-@keyframes nibble-ring-dha {      /* 48% filled → offset 138.23 × 0.52 ≈ 71.9 */
+@keyframes nibble-ring-minerals {  /* 92% filled → offset 138.23 × 0.08 ≈ 11.1 */
   0%, 47%   { stroke-dashoffset: 138.23; }
-  62%, 100% { stroke-dashoffset: 71.9; }
+  62%, 100% { stroke-dashoffset: 11.1; }
 }
 
 /* Camera-shutter flash between stage 1 → 2 */

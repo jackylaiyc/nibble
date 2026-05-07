@@ -137,29 +137,36 @@ export function LandingDemoAnimation({ locale }: Props) {
                   <span>🍞</span>
                 </div>
               </div>
+              {/* Category-level rings — the animation deliberately groups
+                  the 19 tracked nutrients into 3 buckets so the marketing
+                  visual reads as "all of it" rather than "we track 3
+                  named nutrients". */}
               <div className="flex gap-3 mt-1">
                 <DemoRing
-                  emoji="⚙️"
-                  label={L("Iron", "鐵")}
-                  pct={72}
+                  emoji="🍞"
+                  label={L("Macros", "三大營養")}
+                  pct={88}
+                  color="#e6a87c"
+                  animationName="nibble-ring-macros"
+                />
+                <DemoRing
+                  emoji="🍊"
+                  label={L("Vitamins", "維生素")}
+                  pct={76}
+                  color="#f5cf66"
+                  animationName="nibble-ring-vitamins"
+                />
+                <DemoRing
+                  emoji="💎"
+                  label={L("Minerals", "礦物質")}
+                  pct={92}
                   color="#6fb38a"
-                  animationName="nibble-ring-iron"
-                />
-                <DemoRing
-                  emoji="🦴"
-                  label={L("Calcium", "鈣")}
-                  pct={91}
-                  color="#a8d5ba"
-                  animationName="nibble-ring-calcium"
-                />
-                <DemoRing
-                  emoji="🐟"
-                  label="DHA"
-                  pct={48}
-                  color="#86b7e8"
-                  animationName="nibble-ring-dha"
+                  animationName="nibble-ring-minerals"
                 />
               </div>
+              <p className="mt-1 text-[8px] text-ink-faded">
+                {L("+ fibre · omega-3s · 19 in total", "+ 纖維 · Omega-3 · 共 19 項")}
+              </p>
               {/* Bottom badge — pops in late in stage 4 to deliver the
                   emotional payoff: "you did it." */}
               <div
@@ -167,7 +174,7 @@ export function LandingDemoAnimation({ locale }: Props) {
                 style={{ animation: "nibble-badge-pop 14s infinite ease-out" }}
               >
                 <span>✅</span>
-                <span>{L("Today's targets", "今日目標進度")}</span>
+                <span>{L("All 19 nutrients tracked", "全部 19 項營養追蹤")}</span>
               </div>
             </div>
           </div>
@@ -211,7 +218,7 @@ function DemoRing({
   label: string;
   pct: number;
   color: string;
-  animationName: "nibble-ring-iron" | "nibble-ring-calcium" | "nibble-ring-dha";
+  animationName: "nibble-ring-macros" | "nibble-ring-vitamins" | "nibble-ring-minerals";
 }) {
   const r = 22;
   const c = 2 * Math.PI * r; // ≈ 138.23

@@ -307,20 +307,23 @@ function AnalyzeSlide({ locale }: { locale: "en" | "zh-TW" }) {
   // micronutrients.
   const chips = locale === "en"
     ? [
-        { emoji: "🔥", label: "Calories", pct: 64, color: "#f5cf66" },
-        { emoji: "🥩", label: "Protein", pct: 88, color: "#e6a87c" },
-        { emoji: "🌾", label: "Fiber", pct: 52, color: "#a8d5ba" },
-        { emoji: "⚙️", label: "Iron", pct: 72, color: "#6fb38a" },
-        { emoji: "🦴", label: "Calcium", pct: 91, color: "#a8d5ba" },
-        { emoji: "🐟", label: "DHA", pct: 48, color: "#86b7e8" },
+        // Six chips spanning all major nutrient categories — macros,
+        // fibre, vitamins, minerals, omega-3s — so the slide reads
+        // "comprehensive coverage" rather than "we focus on a few".
+        { emoji: "🍞", label: "Macros", pct: 88, color: "#e6a87c" },
+        { emoji: "🌾", label: "Fibre", pct: 64, color: "#a8d5ba" },
+        { emoji: "🍊", label: "Vitamins", pct: 76, color: "#f5cf66" },
+        { emoji: "💎", label: "Minerals", pct: 92, color: "#6fb38a" },
+        { emoji: "🐟", label: "Omega-3s", pct: 70, color: "#86b7e8" },
+        { emoji: "💧", label: "Hydration", pct: 80, color: "#b8d8e8" },
       ]
     : [
-        { emoji: "🔥", label: "熱量", pct: 64, color: "#f5cf66" },
-        { emoji: "🥩", label: "蛋白質", pct: 88, color: "#e6a87c" },
-        { emoji: "🌾", label: "纖維", pct: 52, color: "#a8d5ba" },
-        { emoji: "⚙️", label: "鐵", pct: 72, color: "#6fb38a" },
-        { emoji: "🦴", label: "鈣", pct: 91, color: "#a8d5ba" },
-        { emoji: "🐟", label: "DHA", pct: 48, color: "#86b7e8" },
+        { emoji: "🍞", label: "三大營養", pct: 88, color: "#e6a87c" },
+        { emoji: "🌾", label: "纖維", pct: 64, color: "#a8d5ba" },
+        { emoji: "🍊", label: "維生素", pct: 76, color: "#f5cf66" },
+        { emoji: "💎", label: "礦物質", pct: 92, color: "#6fb38a" },
+        { emoji: "🐟", label: "Omega-3", pct: 70, color: "#86b7e8" },
+        { emoji: "💧", label: "水分", pct: 80, color: "#b8d8e8" },
       ];
   return (
     <SlideShell
@@ -328,8 +331,8 @@ function AnalyzeSlide({ locale }: { locale: "en" | "zh-TW" }) {
       title={locale === "en" ? "AI breaks it all down" : "AI 全方位分析"}
       body={
         locale === "en"
-          ? "Calories, protein, fiber, every vitamin and mineral, omega-3s — 19 nutrients, calculated in seconds."
-          : "熱量、蛋白質、纖維、所有維生素與礦物質、Omega-3——共 19 項營養素，幾秒鐘搞定。"
+          ? "Every macro, vitamin, mineral, fibre and omega-3 your baby needs — 19 nutrients, calculated in seconds. Nothing left out."
+          : "三大營養、所有維生素與礦物質、纖維、Omega-3——19 項全部分析，沒有遺漏。"
       }
     >
       <div className="mt-8 mx-auto max-w-xs grid grid-cols-3 gap-2 text-xs">
@@ -338,7 +341,7 @@ function AnalyzeSlide({ locale }: { locale: "en" | "zh-TW" }) {
         ))}
       </div>
       <p className="mt-3 text-xs text-ink-faded">
-        {locale === "en" ? "+ 13 more tracked" : "另加 13 項持續追蹤"}
+        {locale === "en" ? "Categories shown — 19 individual nutrients tracked underneath" : "圖中為大類別——底下追蹤 19 項個別營養素"}
       </p>
     </SlideShell>
   );
@@ -393,16 +396,20 @@ function PortionSlide({ locale }: { locale: "en" | "zh-TW" }) {
 function TargetsSlide({ locale }: { locale: "en" | "zh-TW" }) {
   // Show a small mix of "covered" and "needs more" badges so the slide
   // reads as a real day rather than a perfect-score celebration.
+  // Mix of category-level badges, each rotating which specific nutrient
+  // is the headline so the same three (iron/calcium/DHA) don't anchor
+  // every screen. "Macros 100%" for the win, "Vitamins 95%" doing well,
+  // "Minerals 60%" needs attention.
   const badges = locale === "en"
     ? [
-        { tone: "good" as const, text: "Protein · 100%" },
-        { tone: "good" as const, text: "Calcium · 95%" },
-        { tone: "warn" as const, text: "Iron · 60%" },
+        { tone: "good" as const, text: "Macros · 100%" },
+        { tone: "good" as const, text: "Vitamins · 95%" },
+        { tone: "warn" as const, text: "Minerals · 60%" },
       ]
     : [
-        { tone: "good" as const, text: "蛋白質 · 100%" },
-        { tone: "good" as const, text: "鈣 · 95%" },
-        { tone: "warn" as const, text: "鐵 · 60%" },
+        { tone: "good" as const, text: "三大營養 · 100%" },
+        { tone: "good" as const, text: "維生素 · 95%" },
+        { tone: "warn" as const, text: "礦物質 · 60%" },
       ];
   return (
     <SlideShell
@@ -450,14 +457,14 @@ function AskSlide({ locale }: { locale: "en" | "zh-TW" }) {
         </p>
         <p className="text-ink mb-4">
           {locale === "en"
-            ? "How much iron does my baby need?"
-            : "寶寶一天需要多少鐵？"}
+            ? "Is my baby getting all the nutrients they need?"
+            : "我家寶寶的營養都吃夠了嗎？"}
         </p>
         <p className="text-peach-deep text-xs mb-2">Nibble 🍎</p>
         <p className="text-ink leading-relaxed">
           {locale === "en"
-            ? "About 11mg/day at 7-12mo — try egg yolk, beef purée, lentils."
-            : "7-12 個月約 11mg/天 — 蛋黃、紅肉泥、扁豆都是好選擇。"}
+            ? "Today's macros and vitamins are on track ✓ A few minerals are slightly under — let's plan dinner around them 🍽️"
+            : "今天的三大營養和維生素都達標 ✓ 礦物質還差一點，晚餐我們搭配一下吧 🍽️"}
         </p>
       </div>
     </SlideShell>
@@ -598,8 +605,8 @@ function SetupSlide({
             id="setup-due"
             label={locale === "en" ? "Estimated due date" : "預產期"}
             hint={locale === "en"
-              ? "Used to pick trimester-specific targets — folate, iron, choline shift across T1/T2/T3."
-              : "用來推算所在孕期——不同三個月對葉酸、鐵、膽鹼的需求不同。"}
+              ? "Used to pick trimester-specific targets — every nutrient your body and baby need shifts across T1/T2/T3."
+              : "用來推算所在孕期——你和寶寶需要的各項營養素，會依孕期不同而調整。"}
             value={dueDate}
             onChange={setDueDate}
             min={today}

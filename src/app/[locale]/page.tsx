@@ -83,11 +83,18 @@ export default function LandingPage({
             </div>
             <span className="ml-auto text-xs font-medium text-sage-deep bg-sage/30 rounded-full px-3 py-1">{t("demoStatus")}</span>
           </div>
+          {/* Category-level rings — the demo deliberately groups the 19
+              tracked nutrients into 3 buckets (macros, vitamins, minerals)
+              instead of name-checking 3 specific ones. Communicates breadth
+              at a glance: "all of it covered", not "we track 3 things". */}
           <div className="mt-4 grid grid-cols-3 gap-3">
-            <NutrientRing emoji="⚙️" label={t("demoNutrientIron")} pct={72} color="#6fb38a" />
-            <NutrientRing emoji="✨" label={t("demoNutrientZinc")} pct={48} color="#f5cf66" />
-            <NutrientRing emoji="🦴" label={t("demoNutrientCalcium")} pct={91} color="#a8d5ba" />
+            <NutrientRing emoji="🍞" label={t("demoCategoryMacros")} pct={88} color="#e6a87c" />
+            <NutrientRing emoji="🍊" label={t("demoCategoryVitamins")} pct={76} color="#f5cf66" />
+            <NutrientRing emoji="💎" label={t("demoCategoryMinerals")} pct={92} color="#6fb38a" />
           </div>
+          <p className="mt-2 text-[11px] text-ink-faded text-center">
+            + {locale === "en" ? "fibre, omega-3s & more — 19 nutrients in total" : "纖維、Omega-3 等——共 19 項營養素"}
+          </p>
           <p className="mt-4 text-sm text-ink-soft leading-relaxed">
             {t("demoSuggestion")}
           </p>
