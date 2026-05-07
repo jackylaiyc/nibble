@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useChildProfileStore } from "@/stores/childProfileStore";
+import { useMealStore } from "@/stores/mealStore";
 import { useSubscriptionStore } from "@/stores/subscriptionStore";
 import { useUsageStore } from "@/stores/usageStore";
 import {
@@ -15,6 +16,7 @@ import {
 import { limitsFor } from "@/lib/pricing/plans";
 import { PaywallModal } from "@/components/paywall/PaywallModal";
 import { getLifeStage } from "@/lib/pediatric/ageBucket";
+import { buildIntakeChatContext } from "@/lib/pediatric/intakeForChat";
 
 /**
  * Ask Nibble — the conversational half of the hero pair (scan + chat).
@@ -61,6 +63,9 @@ export default function ChatPage() {
   const recordUsage = useUsageStore((s) => s.record);
   const todayChats = useUsageStore((s) => s.chat);
 
+  const loadMeals = useMealStore((s) => s.loadFromStorage);
+  const getMealsForDate = useMealStore((s) => s.getMealsForDate);
+
   const loadChat = useChatStore((s) => s.loadFromStorage);
   const addMessage = useChatStore((s) => s.addMessage);
   const popLastAssistant = useChatStore((s) => s.popLastAssistant);
@@ -75,8 +80,9 @@ export default function ChatPage() {
     loadChildren();
     loadSub();
     loadUsage();
+    loadMeals();
     loadChat();
-  }, [loadChildren, loadSub, loadUsage, loadChat]);
+  }, [loadChildren, loadSub, loadUsage, loadMeals, loadChat]);
 
   // If no child after hydration, bounce to onboarding — chat without
   // context produces generic Gemini output that isn't what we promise.
@@ -91,6 +97,20 @@ export default function ChatPage() {
       activeChild ? allMessages.filter((m) => m.childId === activeChild.id) : [],
     [activeChild, allMessages],
   );
+
+  // Today's intake — feeds two things:
+  //   1. A compact prose block that ships to /api/ai/chat each turn,
+  //      so the model can analyse what was eaten and recommend
+  //      recipes for the gaps.
+  //   2. The empty-state suggested-question copy (e.g. swap a generic
+  //      "what nutrients does my baby need?" prompt for a personal
+  //      "I logged X meals today — what's still missing?" prompt).
+  const todayIntake = useMemo(() => {
+    if (!activeChild) return null;
+    const meals = getMealsForDate(activeChild.id, new Date());
+    const bucket = getLifeStage(activeChild).key;
+    return buildIntakeChatContext(meals, bucket, locale);
+  }, [activeChild, getMealsForDate, locale]);
 
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -153,6 +173,10 @@ export default function ChatPage() {
             knownAllergens: activeChild.allergens,
             childId: activeChild.id,
           },
+          // Snapshot of today's intake so the API can analyse, surface
+          // gaps, and suggest recipes that close them. May be null if
+          // nothing's been logged today.
+          todayIntake: todayIntake?.prompt,
         }),
       });
       if (!res.ok) {
@@ -261,8 +285,10 @@ export default function ChatPage() {
         )}
       </header>
 
-      {/* Transcript */}
-      <section className="flex-1 px-4 py-5">
+      {/* Transcript — pb-[160px] so the LAST message clears the sticky
+          composer (~100px) plus a margin. Without this, long replies
+          end up hidden behind the input. */}
+      <section className="flex-1 px-4 py-5 pb-[160px]">
         <div className="max-w-2xl mx-auto space-y-4">
           {messages.length === 0 && (
             <EmptyState
@@ -274,6 +300,16 @@ export default function ChatPage() {
                 t("suggest3"),
                 t("suggest4"),
               ]}
+              intake={
+                todayIntake
+                  ? {
+                      mealCount: todayIntake.mealCount,
+                      foodList: todayIntake.foodList,
+                      gapCount: todayIntake.gapNutrients.length,
+                    }
+                  : null
+              }
+              locale={locale}
               onPick={applySuggestion}
             />
           )}
@@ -346,27 +382,55 @@ function EmptyState({
   tTitle,
   tSub,
   suggestions,
+  intake,
+  locale,
   onPick,
 }: {
   tTitle: string;
   tSub: string;
   suggestions: string[];
+  intake: { mealCount: number; foodList: string; gapCount: number } | null;
+  locale: "zh-TW" | "en";
   onPick: (s: string) => void;
 }) {
   return (
-    <div className="text-center py-10">
+    <div className="text-center py-10 px-1">
       <div className="text-5xl mb-3">🍎</div>
       <p className="font-display text-xl font-bold text-ink">{tTitle}</p>
       <p className="mt-2 text-sm text-ink-soft max-w-md mx-auto leading-relaxed">
         {tSub}
       </p>
+
+      {/* Today-intake awareness card — confirms to the user that the AI
+          already sees what they've logged. Encourages relevant questions
+          ("what's missing?") rather than generic ones. */}
+      {intake && (
+        <div className="mt-6 mx-auto max-w-md rounded-card bg-white border border-border p-4 text-left">
+          <p className="text-xs text-ink-faded uppercase tracking-wide">
+            {locale === "en" ? "I can see today's meals" : "今天的紀錄我都看得到"}
+          </p>
+          <p className="mt-1 text-sm font-medium text-ink leading-snug break-words">
+            {locale === "en"
+              ? `${intake.mealCount} meal${intake.mealCount > 1 ? "s" : ""} logged · ${intake.foodList}`
+              : `已記錄 ${intake.mealCount} 餐 · ${intake.foodList}`}
+          </p>
+          {intake.gapCount > 0 && (
+            <p className="mt-2 text-xs text-peach-deep">
+              {locale === "en"
+                ? `${intake.gapCount} nutrient${intake.gapCount > 1 ? "s" : ""} still under target — ask me what to add.`
+                : `還有 ${intake.gapCount} 項營養未達標——可以問我加什麼。`}
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="mt-6 grid gap-2 max-w-md mx-auto">
         {suggestions.map((s) => (
           <button
             key={s}
             type="button"
             onClick={() => onPick(s)}
-            className="text-left text-sm text-ink bg-white border border-border rounded-card px-4 py-3 hover:border-peach-deep hover:bg-peach/10"
+            className="text-left text-sm text-ink bg-white border border-border rounded-card px-4 py-3 hover:border-peach-deep hover:bg-peach/10 break-words leading-snug"
           >
             💬 {s}
           </button>
@@ -390,7 +454,7 @@ function MessageBubble({
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-peach-deep text-white px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap">
+        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-peach-deep text-white px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words">
           {message.content}
         </div>
       </div>
@@ -419,7 +483,7 @@ function MessageBubble({
           </div>
         )}
 
-        <div className="rounded-2xl rounded-bl-sm bg-white border border-border px-4 py-2.5 text-[15px] text-ink leading-relaxed whitespace-pre-wrap">
+        <div className="rounded-2xl rounded-bl-sm bg-white border border-border px-4 py-2.5 text-[15px] text-ink leading-relaxed whitespace-pre-wrap break-words">
           {message.content}
         </div>
 

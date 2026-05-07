@@ -45,6 +45,11 @@ interface ChatRequest {
   messages: ChatMessage[];
   child?: ChildContext;
   locale?: "zh-TW" | "en";
+  /** Optional pre-formatted block describing today's logged meals
+   *  and nutrient coverage — built by buildIntakeChatContext on the
+   *  client. The model uses it to analyse intake, name the gaps, and
+   *  recommend recipes that close them. */
+  todayIntake?: string;
 }
 
 type DisclaimerLevel = "none" | "educational" | "pediatrician" | "emergency";
@@ -63,7 +68,11 @@ interface ChatResponseBody {
 
 // ─── system prompt ────────────────────────────────────────────────────────
 
-function buildSystemPrompt(child?: ChildContext, locale: "zh-TW" | "en" = "zh-TW"): string {
+function buildSystemPrompt(
+  child?: ChildContext,
+  locale: "zh-TW" | "en" = "zh-TW",
+  todayIntake?: string,
+): string {
   const today = new Date().toISOString().slice(0, 10);
 
   const childLine = child
@@ -74,11 +83,42 @@ function buildSystemPrompt(child?: ChildContext, locale: "zh-TW" | "en" = "zh-TW
         : "")
     : "Child context: (no child selected — ask the caregiver to add one first if logging is needed)";
 
+  // Inject today's intake summary when the client supplied one. With it,
+  // the AI's analysis ("you're light on iron today") and recipe
+  // suggestions ("a yolk + a spoon of beef purée would close the gap")
+  // can be specific to this caregiver's actual day rather than generic.
+  const intakeBlock = todayIntake
+    ? `\n========================
+TODAY'S INTAKE (auto-generated, refreshes each turn)
+========================
+${todayIntake}
+
+How to USE this data:
+- When the caregiver asks something general about today's nutrition or
+  what to serve next, lead with a 1-line analysis of where they stand
+  ("Today's looking good on protein and calcium, but iron is at 60%.").
+- For each gap above, briefly explain WHY that nutrient matters at this
+  age in one sentence — caregivers retain reasons better than numbers.
+- Suggest 2-3 specific foods or recipes that would help close the
+  biggest gap. Be practical: include rough portions a baby actually
+  eats ("1 small yolk", "2 tbsp red-lentil purée"). When you suggest a
+  recipe, give a 3-step micro-recipe inline rather than a full
+  cookbook entry.
+- If everything is on track, say so warmly and suggest a light snack
+  idea or a way to stay consistent tomorrow. Don't manufacture concern.
+- Never copy the raw percentages back at the caregiver mechanically —
+  paraphrase. ("Iron's a bit low" beats "Iron is at 60% of the target.")
+`
+    : `\n(No meals logged today yet — when the caregiver asks "what should we
+eat?" or similar, suggest balanced options and gently nudge them to log
+a meal so future answers can be specific to their day.)\n`;
+
   return `You are Nibble (寶貝小口), an educational feeding and parenting assistant for caregivers of children 6 months to 4 years old. You are NOT a pediatrician, doctor, nurse, or licensed clinician. You do NOT diagnose, treat, prescribe, or dose.
 
 Today is ${today}.
 ${childLine}
 Default response language: ${locale === "en" ? "English" : "Traditional Chinese (zh-TW)"}. If the caregiver writes in a different language, reply in that language.
+${intakeBlock}
 
 ========================
 HARD REFUSALS — NEVER ATTEMPT TO ANSWER THESE
@@ -97,7 +137,8 @@ For any question involving the items below, respond ONLY with a short empathetic
 YOU MAY DISCUSS
 ========================
 - Age-appropriate portions and textures (purée, BLW, finger food, table food).
-- Iron / zinc / calcium / vitamin D / DHA / protein / fiber — what foods are rich in them, WHO/AAP targets, how to bridge a gap.
+- Any of the 19 tracked nutrients — macros (calories, protein, fat, carbs, fiber), vitamins (A, C, D), minerals (iron, zinc, calcium, sodium, iodine), omega-3s (DHA), pregnancy/lactation extras (folate, choline), exposure trackers (caffeine, alcohol, sugar). Cover what foods are rich in each, WHO/AAP daily targets at this age, and how to bridge a gap with realistic portions.
+- Recipes — when the caregiver asks, give a 3-step micro-recipe inline (ingredients in 1 line, method in 2-3 short steps). Pick recipes that close the biggest gap from today's intake when one is in context.
 - Introducing common allergens early (AAP guidance on peanut, egg at 4–6 months for at-risk infants, etc.) as general education.
 - Picky-eating strategies, mealtime environment, division of responsibility.
 - Food safety: choking hazards, whole nuts, honey <12 mo, raw fish, etc.
@@ -173,6 +214,7 @@ async function callGemini(
   messages: ChatMessage[],
   child: ChildContext | undefined,
   locale: "zh-TW" | "en",
+  todayIntake: string | undefined,
 ): Promise<GeminiGenerateResponse> {
   const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
   if (!apiKey) throw new Error("GOOGLE_GEMINI_API_KEY not set");
@@ -183,7 +225,9 @@ async function callGemini(
   }));
 
   const body = {
-    systemInstruction: { parts: [{ text: buildSystemPrompt(child, locale) }] },
+    systemInstruction: {
+      parts: [{ text: buildSystemPrompt(child, locale, todayIntake) }],
+    },
     contents,
     tools: [{ functionDeclarations: toolDeclarations }],
     generationConfig: {
@@ -302,7 +346,7 @@ export async function POST(request: NextRequest) {
 
   let gemini: GeminiGenerateResponse;
   try {
-    gemini = await callGemini(body.messages, body.child, locale);
+    gemini = await callGemini(body.messages, body.child, locale, body.todayIntake);
   } catch (err) {
     // Log the full error server-side; never echo internals (env var names,
     // upstream API responses) to the client — those leak operator metadata
