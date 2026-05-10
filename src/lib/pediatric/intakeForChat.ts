@@ -1,5 +1,6 @@
 import type { MealRecord } from "@/stores/mealStore";
 import type { AgeBucket } from "./ageBucket";
+import { AGE_BUCKET_LABELS } from "./ageBucket";
 import { computeCoverage, sumMeals, topGaps } from "./rdaGapAnalysis";
 import { NUTRIENT_LABELS, RDA, type Nutrient } from "./rdaTables";
 
@@ -65,10 +66,13 @@ export function buildIntakeChatContext(
     })
     .join("; ");
 
-  // Bucket label for context — "9-11mo" tells the model which RDA row
-  // these percentages reference.
+  // Human-readable life-stage label so the AI sees "baby 9–11 months"
+  // rather than the internal key "9-11mo". Falls back to the raw key for
+  // any future bucket values not yet in the labels table.
   const bucketRow = RDA[bucket];
-  const bucketLabel = `${bucket} (${Object.keys(bucketRow).length} nutrients tracked)`;
+  const stageLabel =
+    AGE_BUCKET_LABELS[bucket]?.[locale] ?? bucket;
+  const bucketLabel = `${stageLabel} (${Object.keys(bucketRow).length} nutrients tracked)`;
 
   const prompt = [
     `Meals logged today: ${meals.length}`,

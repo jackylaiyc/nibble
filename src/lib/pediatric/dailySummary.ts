@@ -1,12 +1,19 @@
 /**
  * Build a caregiver-friendly summary of a day's nutrition intake.
  *
- * Input: the meals logged on a given date + the child's age bucket.
+ * Input: the meals logged on a given date + the life-stage bucket.
  * Output: a verdict (excellent / good / gaps), warm locale-aware copy,
  * and the top nutrient gaps/excesses to mention.
  *
  * Called from the dashboard to render the post-10pm "how did today go"
  * card. Pure math + copy — no side effects.
+ *
+ * Life-stage awareness:
+ * - For pregnant profiles, caffeine/alcohol excesses get specific, emphatic
+ *   copy ("You've hit the 200 mg caffeine limit — swap the second coffee for
+ *   herbal tea") rather than the generic "keep an eye on X".
+ * - For breastfeeding profiles, caffeine/alcohol get timing-aware copy.
+ * - Infant/toddler copy is unchanged.
  */
 
 import type { AgeBucket } from "./ageBucket";
@@ -74,8 +81,27 @@ export function buildDailySummary(
     const eZh = NUTRIENT_LABELS[e0]["zh-TW"];
     titleEn = "Great job today! ✨";
     titleZh = "今天表現很好！✨";
-    bodyEn = `All priority nutrients met. Keep an eye on ${eEn} which came in a bit over today.`;
-    bodyZh = `關鍵營養都補足了，只是${eZh}稍微偏高，明天可以留意一下。`;
+
+    // Pregnancy: caffeine/alcohol over-limit needs an emphatic warning,
+    // not the generic "a bit over" phrasing used for sodium/sugar.
+    const isPregnant = bucket.startsWith("pregnant-");
+    const isLactation = bucket.startsWith("lactation-");
+    if (e0 === "alcohol" && isPregnant) {
+      bodyEn = `All priority nutrients met. However, alcohol was logged today — there's no safe amount during pregnancy. Please speak with your OB if you have questions.`;
+      bodyZh = `關鍵營養都補足了。不過今天有紀錄到酒精攝取——懷孕期間無安全劑量，如有疑問請諮詢你的婦產科醫師。`;
+    } else if (e0 === "caffeine" && isPregnant) {
+      bodyEn = `All priority nutrients met. Watch your caffeine — you've hit or exceeded the 200 mg daily limit. Try swapping the next coffee for herbal tea or decaf.`;
+      bodyZh = `關鍵營養都補足了。注意咖啡因攝取——今天已達到或超過 200 mg 的每日建議上限。下一杯可以改喝草本茶或低咖啡因版本。`;
+    } else if (e0 === "caffeine" && isLactation) {
+      bodyEn = `All priority nutrients met. Caffeine came in a bit high today (over 300 mg). High intake can affect your baby's sleep — try capping tomorrow at 2 cups of coffee.`;
+      bodyZh = `關鍵營養都補足了。今天咖啡因稍微偏高（超過 300 mg）。攝取過多可能影響寶寶睡眠，明天可以試著控制在 2 杯咖啡以內。`;
+    } else if (e0 === "alcohol" && isLactation) {
+      bodyEn = `All priority nutrients met. Alcohol was logged — remember to wait 2–3 hours after drinking before nursing. One standard drink is generally considered fine.`;
+      bodyZh = `關鍵營養都補足了。今天有紀錄到酒精——記得喝酒後等 2–3 小時再哺乳。偶爾 1 份標準量一般是可接受的。`;
+    } else {
+      bodyEn = `All priority nutrients met. Keep an eye on ${eEn} which came in a bit over today.`;
+      bodyZh = `關鍵營養都補足了，只是${eZh}稍微偏高，明天可以留意一下。`;
+    }
   } else if (priorityGaps.length <= 2) {
     verdict = "good";
     const g0 = priorityGaps[0]!;
